@@ -17,6 +17,7 @@ function TasksPage() {
   const [typeFilter, setTypeFilter] = useState<TaskType | "All">("All");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
+  const [active, setActive] = useState<Task | null>(null);
 
   const filtered = tasks.filter((t) => {
     if (typeFilter !== "All" && t.type !== typeFilter) return false;
