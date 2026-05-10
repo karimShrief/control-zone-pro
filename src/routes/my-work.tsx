@@ -2,6 +2,7 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { PageHeader, KpiCard } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ShiftClockCard } from "@/components/ShiftClockCard";
 import { tasks, incidents, projectTasks, handoverPoints, shifts, userById } from "@/lib/mock-data";
 import { Briefcase, AlertTriangle, ListChecks, ClipboardList, Plus, FileWarning } from "lucide-react";
 
@@ -83,25 +84,18 @@ function MyWork() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="font-semibold mb-2">My Shift Today</h3>
-            {myShift ? (
-              <>
-                <div className="text-2xl font-semibold">{myShift.type}</div>
-                <div className="text-xs text-muted-foreground mt-1">{myShift.date}</div>
-                <div className="mt-3 pt-3 border-t border-border">
-                  <div className="text-xs text-muted-foreground mb-2">On shift with you</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {myShift.engineers.filter((id) => id !== user.id).map((id) => (
-                      <span key={id} className="text-xs rounded-full bg-muted px-2 py-0.5">{userById(id).split(" ")[0]}</span>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="text-sm text-muted-foreground">Off-shift today</div>
-            )}
-          </div>
+          <ShiftClockCard />
+
+          {myShift && (
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h3 className="font-semibold mb-2 text-sm">On shift with you</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {myShift.engineers.filter((id) => id !== user.id).map((id) => (
+                  <span key={id} className="text-xs rounded-full bg-muted px-2 py-0.5">{userById(id).split(" ")[0]}</span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-lg border border-border bg-card p-4">
             <h3 className="font-semibold mb-3">My Incidents</h3>

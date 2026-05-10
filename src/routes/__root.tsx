@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth";
+import { ShiftClockProvider } from "@/lib/shift-clock";
 import { AppShell } from "@/components/AppShell";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -117,10 +118,12 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AppShell>
-          <Outlet />
-        </AppShell>
-        <Toaster />
+        <ShiftClockProvider>
+          <AppShell>
+            <Outlet />
+          </AppShell>
+          <Toaster />
+        </ShiftClockProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
