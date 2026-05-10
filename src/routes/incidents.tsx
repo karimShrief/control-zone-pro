@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { incidents, userById, type Severity, type IncidentCategory } from "@/lib/mock-data";
-import { Plus, AlertTriangle, UserPlus, CheckCircle2, ArrowUpRight } from "lucide-react";
+import { incidents, userById, type Incident, type Severity } from "@/lib/mock-data";
+import { Plus, AlertTriangle, UserPlus, CheckCircle2, ArrowUpRight, MessageSquare, Upload, FileText } from "lucide-react";
+import { DetailDrawer } from "@/components/DetailDrawer";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/incidents")({
   component: IncidentsPage,
