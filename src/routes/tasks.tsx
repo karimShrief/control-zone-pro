@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { tasks, userById, type TaskType, type TaskStatus } from "@/lib/mock-data";
-import { Plus, Filter, MessageSquare, Paperclip } from "lucide-react";
+import { tasks, userById, type Task, type TaskType, type TaskStatus } from "@/lib/mock-data";
+import { Plus, Filter, MessageSquare, Paperclip, MoreHorizontal, CheckCircle2, ArrowUpRight, Upload } from "lucide-react";
+import { DetailDrawer } from "@/components/DetailDrawer";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/tasks")({
   component: TasksPage,
