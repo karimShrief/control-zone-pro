@@ -122,7 +122,7 @@ function TasksPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((t) => (
-                  <tr key={t.id} className="hover:bg-muted/40">
+                  <tr key={t.id} className="hover:bg-muted/40 cursor-pointer" onClick={() => setActive(t)}>
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{t.id}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium">{t.title}</div>
@@ -138,8 +138,14 @@ function TasksPage() {
                     <td className="px-4 py-3 text-xs">{userById(t.assignee)}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{t.dueDate}</td>
                     <td className="px-4 py-3"><StatusBadge status={t.audit} /></td>
-                    <td className="px-4 py-3">
-                      <button className="text-xs text-primary hover:underline">Open</button>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-0.5">
+                        <RowBtn title="Update" icon={CheckCircle2} onClick={() => setActive(t)} />
+                        <RowBtn title="Comment" icon={MessageSquare} onClick={() => setActive(t)} />
+                        <RowBtn title="Attach evidence" icon={Upload} onClick={() => setActive(t)} />
+                        <RowBtn title="Escalate" icon={ArrowUpRight} onClick={() => { t.status = "Escalated"; toast.success(`${t.id} escalated`); }} />
+                        <RowBtn title="More" icon={MoreHorizontal} onClick={() => setActive(t)} />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -148,7 +154,27 @@ function TasksPage() {
           </div>
         </div>
       </div>
+
+      <DetailDrawer
+        kind="task"
+        open={!!active}
+        onOpenChange={(v) => !v && setActive(null)}
+        item={active ? {
+          id: active.id, title: active.title, description: active.description,
+          status: active.status, priority: active.priority, sla: active.sla,
+          assignee: active.assignee, category: active.category, type: active.type,
+          dueDate: active.dueDate, audit: active.audit,
+        } : null}
+      />
     </div>
+  );
+}
+
+function RowBtn({ title, icon: Icon, onClick }: { title: string; icon: React.ComponentType<{ className?: string }>; onClick: () => void }) {
+  return (
+    <button title={title} onClick={onClick} className="rounded-md p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground">
+      <Icon className="h-3.5 w-3.5" />
+    </button>
   );
 }
 
