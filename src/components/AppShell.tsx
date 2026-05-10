@@ -4,8 +4,12 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Briefcase, ListChecks, AlertTriangle, FolderKanban,
   CalendarDays, Repeat, ClipboardList, BookOpen, BarChart3, FileText,
-  ShieldCheck, LogOut, Activity, Search, Bell,
+  ShieldCheck, LogOut, Activity, Search, Bell, ChevronDown, LogIn, UserCircle2,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Role } from "@/lib/mock-data";
 
 interface NavItem { to: string; label: string; icon: React.ComponentType<{ className?: string }>; roles: Role[]; }
