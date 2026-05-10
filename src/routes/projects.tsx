@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { projects, projectTasks, userById } from "@/lib/mock-data";
+import { userById } from "@/lib/mock-data";
+import { projectService } from "@/lib/services";
 import { Plus, FolderKanban, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/projects")({
@@ -9,6 +10,8 @@ export const Route = createFileRoute("/projects")({
 });
 
 function ProjectsPage() {
+  const projects = projectService.list();
+
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
       <PageHeader
@@ -23,9 +26,14 @@ function ProjectsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         {projects.map((p) => {
-          const subs = projectTasks.filter((pt) => pt.projectId === p.id);
+          const subs = projectService.listTasks(p.id);
           return (
-            <Link key={p.id} to="/projects/$projectId" params={{ projectId: p.id }} className="rounded-lg border border-border bg-card p-4 hover:border-primary transition group">
+            <Link
+              key={p.id}
+              to="/projects/$projectId"
+              params={{ projectId: p.id }}
+              className="rounded-lg border border-border bg-card p-4 hover:border-primary transition group"
+            >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wider">
                   <FolderKanban className="h-3.5 w-3.5" /> {p.type}
@@ -46,17 +54,25 @@ function ProjectsPage() {
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-                <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground">{p.team}</span>
+                <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground">
+                  {p.team}
+                </span>
                 <StatusBadge status={p.priority} />
-                <span className="text-muted-foreground">Risk: <span className="font-medium text-foreground">{p.risk}</span></span>
+                <span className="text-muted-foreground">
+                  Risk: <span className="font-medium text-foreground">{p.risk}</span>
+                </span>
                 {p.blockers.length > 0 && (
-                  <span className="flex items-center gap-1 text-critical"><AlertCircle className="h-3 w-3" /> {p.blockers.length} blocker</span>
+                  <span className="flex items-center gap-1 text-critical">
+                    <AlertCircle className="h-3 w-3" /> {p.blockers.length} blocker
+                  </span>
                 )}
               </div>
 
               <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
                 <span>Owner: {userById(p.owner).split(" ")[0]}</span>
-                <span>{subs.length} subtasks · Due {p.targetDate}</span>
+                <span>
+                  {subs.length} subtasks · Due {p.targetDate}
+                </span>
               </div>
             </Link>
           );

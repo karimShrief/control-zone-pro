@@ -35,9 +35,13 @@ function LoginPage() {
     <div className="min-h-screen w-full flex bg-sidebar text-sidebar-foreground">
       {/* Left brand panel */}
       <div className="hidden lg:flex flex-1 flex-col justify-between p-12 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-20" style={{
-          backgroundImage: "radial-gradient(circle at 25% 20%, oklch(0.62 0.18 245 / 0.6), transparent 40%), radial-gradient(circle at 75% 80%, oklch(0.55 0.2 220 / 0.5), transparent 40%)",
-        }} />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 25% 20%, oklch(0.62 0.18 245 / 0.6), transparent 40%), radial-gradient(circle at 75% 80%, oklch(0.55 0.2 220 / 0.5), transparent 40%)",
+          }}
+        />
         <div className="relative">
           <div className="flex items-center gap-3">
             <div className="h-11 w-11 rounded-md bg-sidebar-primary flex items-center justify-center">
@@ -45,7 +49,9 @@ function LoginPage() {
             </div>
             <div>
               <div className="text-xl font-semibold">Ops Command Platform</div>
-              <div className="text-xs uppercase tracking-widest text-sidebar-foreground/60">Data Center · NOC</div>
+              <div className="text-xs uppercase tracking-widest text-sidebar-foreground/60">
+                Data Center · NOC
+              </div>
             </div>
           </div>
         </div>
@@ -54,8 +60,8 @@ function LoginPage() {
             Unified command center for live operations.
           </h1>
           <p className="text-sidebar-foreground/70 text-base">
-            Track tasks, incidents, projects, shifts and handovers from a single
-            operations control surface — built for engineers, managers and executives.
+            Track tasks, incidents, projects, shifts and handovers from a single operations control
+            surface — built for engineers, managers and executives.
           </p>
           <div className="grid grid-cols-2 gap-3 pt-4">
             {[
@@ -64,7 +70,10 @@ function LoginPage() {
               { k: "ISO 27001", v: "Aligned" },
               { k: "24×7", v: "NOC Coverage" },
             ].map((s) => (
-              <div key={s.v} className="rounded-md border border-sidebar-border bg-sidebar-accent/40 p-3">
+              <div
+                key={s.v}
+                className="rounded-md border border-sidebar-border bg-sidebar-accent/40 p-3"
+              >
                 <div className="text-lg font-semibold text-sidebar-primary-foreground">{s.k}</div>
                 <div className="text-xs text-sidebar-foreground/70">{s.v}</div>
               </div>
@@ -87,12 +96,16 @@ function LoginPage() {
               <div className="font-semibold">Ops Command</div>
             </div>
             <h2 className="text-2xl font-semibold">Sign in</h2>
-            <p className="text-sm text-muted-foreground mt-1">Use your operations credentials to continue.</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Use your operations credentials to continue.
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-xs font-medium text-foreground uppercase tracking-wider">Username</label>
+              <label className="text-xs font-medium text-foreground uppercase tracking-wider">
+                Username
+              </label>
               <input
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -102,7 +115,9 @@ function LoginPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-foreground uppercase tracking-wider">Password</label>
+              <label className="text-xs font-medium text-foreground uppercase tracking-wider">
+                Password
+              </label>
               <input
                 type="password"
                 value={password}
@@ -121,13 +136,18 @@ function LoginPage() {
           </form>
 
           <div className="mt-8">
-            <div className="text-xs uppercase tracking-wider text-muted-foreground mb-3">Demo accounts (password: demo)</div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
+              Demo accounts (password: demo)
+            </div>
             <div className="grid grid-cols-2 gap-2">
               {demo.map((d) => (
                 <button
                   key={d.username}
                   type="button"
-                  onClick={() => { setUsername(d.username); setPassword("demo"); }}
+                  onClick={() => {
+                    setUsername(d.username);
+                    setPassword("demo");
+                  }}
                   className="rounded-md border border-border bg-card px-3 py-2 text-left text-xs hover:border-primary transition"
                 >
                   <div className="font-medium text-foreground">{d.label}</div>

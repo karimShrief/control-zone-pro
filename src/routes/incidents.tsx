@@ -2,8 +2,20 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { incidents, userById, type Incident, type Severity } from "@/lib/mock-data";
-import { Plus, AlertTriangle, UserPlus, CheckCircle2, ArrowUpRight, MessageSquare, Upload, FileText } from "lucide-react";
+import { userById, type Incident, type Severity } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth";
+import { canCreateIncidents, canWorkIncidents } from "@/lib/rbac";
+import { incidentService } from "@/lib/services";
+import {
+  Plus,
+  AlertTriangle,
+  UserPlus,
+  CheckCircle2,
+  ArrowUpRight,
+  MessageSquare,
+  Upload,
+  FileText,
+} from "lucide-react";
 import { DetailDrawer } from "@/components/DetailDrawer";
 import { toast } from "sonner";
 
@@ -12,21 +24,71 @@ export const Route = createFileRoute("/incidents")({
 });
 
 function IncidentsPage() {
+  const { user } = useAuth();
+  const [rows, setRows] = useState(() => incidentService.list());
   const [sevFilter, setSevFilter] = useState<Severity | "All">("All");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<Incident | null>(null);
 
-  const filtered = incidents.filter((i) => {
+  const canCreate = canCreateIncidents(user);
+  const canWork = canWorkIncidents(user);
+  const refresh = () => setRows(incidentService.list());
+
+  const assignToMe = (incident: Incident) => {
+    if (!user || !canWork) return;
+    incidentService.assignTo(incident.id, user.id, user.id);
+    refresh();
+    toast.success(`${incident.id} assigned`);
+  };
+
+  const acceptIncident = (incident: Incident) => {
+    if (!user || !canWork) return;
+    incidentService.updateStatus(incident.id, "Accepted", user.id);
+    refresh();
+    toast.success(`${incident.id} accepted`);
+  };
+
+  const escalateIncident = (incident: Incident) => {
+    if (!user || !canWork) return;
+    incidentService.escalate(incident.id, user.id);
+    refresh();
+    toast.success(`${incident.id} escalated to SEV-1`);
+  };
+
+  const createIncident = () => {
+    if (!user || !canCreate) return;
+    const incident = incidentService.create(user.id, {
+      title: "Manual incident",
+      description: "Mock incident created from the existing Create Incident action",
+      source: "Manual",
+      category: "Unknown",
+    });
+    refresh();
+    if (incident) toast.success(`${incident.id} created`);
+  };
+
+  const resolveIncident = (incident: Incident) => {
+    if (!user || !canWork) return;
+    incidentService.updateStatus(incident.id, "Resolved", user.id);
+    refresh();
+    toast.success(`${incident.id} resolved`);
+  };
+
+  const filtered = rows.filter((i) => {
     if (sevFilter !== "All" && i.severity !== sevFilter) return false;
-    if (search && !(`${i.title} ${i.id}`.toLowerCase().includes(search.toLowerCase()))) return false;
+    if (search && !`${i.title} ${i.id}`.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
-  const bySev = (s: Severity) => incidents.filter((i) => i.severity === s).length;
+  const bySev = (s: Severity) => rows.filter((i) => i.severity === s).length;
   const bySource: Record<string, number> = {};
-  incidents.forEach((i) => { bySource[i.source] = (bySource[i.source] ?? 0) + 1; });
+  rows.forEach((i) => {
+    bySource[i.source] = (bySource[i.source] ?? 0) + 1;
+  });
   const byCat: Record<string, number> = {};
-  incidents.forEach((i) => { byCat[i.category] = (byCat[i.category] ?? 0) + 1; });
+  rows.forEach((i) => {
+    byCat[i.category] = (byCat[i.category] ?? 0) + 1;
+  });
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
@@ -34,19 +96,30 @@ function IncidentsPage() {
         title="Incidents"
         subtitle="Active and recent operational incidents · sourced from monitoring, handovers, manual entry and ITSM"
         actions={
-          <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
-            <Plus className="h-4 w-4" /> Create Incident
-          </button>
+          canCreate ? (
+            <button
+              onClick={createIncident}
+              className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" /> Create Incident
+            </button>
+          ) : null
         }
       />
 
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 lg:col-span-3 space-y-4">
           <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="font-semibold text-sm mb-3 flex items-center gap-2"><AlertTriangle className="h-4 w-4" /> Severity</h3>
+            <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" /> Severity
+            </h3>
             <div className="space-y-1.5">
               {(["SEV-1", "SEV-2", "SEV-3", "SEV-4"] as Severity[]).map((s) => (
-                <button key={s} onClick={() => setSevFilter(s === sevFilter ? "All" : s)} className={`w-full flex items-center justify-between text-sm rounded-md px-2 py-1.5 ${sevFilter === s ? "bg-muted" : "hover:bg-muted/50"}`}>
+                <button
+                  key={s}
+                  onClick={() => setSevFilter(s === sevFilter ? "All" : s)}
+                  className={`w-full flex items-center justify-between text-sm rounded-md px-2 py-1.5 ${sevFilter === s ? "bg-muted" : "hover:bg-muted/50"}`}
+                >
                   <StatusBadge status={s} />
                   <span className="font-semibold">{bySev(s)}</span>
                 </button>
@@ -107,8 +180,14 @@ function IncidentsPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((i) => (
-                  <tr key={i.id} className="hover:bg-muted/40 cursor-pointer" onClick={() => setActive(i)}>
-                    <td className="px-4 py-3"><StatusBadge status={i.severity} /></td>
+                  <tr
+                    key={i.id}
+                    className="hover:bg-muted/40 cursor-pointer"
+                    onClick={() => setActive(i)}
+                  >
+                    <td className="px-4 py-3">
+                      <StatusBadge status={i.severity} />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{i.id}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium">{i.title}</div>
@@ -119,18 +198,68 @@ function IncidentsPage() {
                       <div>{i.source}</div>
                       <div className="text-muted-foreground font-mono">{i.sourceRef}</div>
                     </td>
-                    <td className="px-4 py-3"><StatusBadge status={i.status} /></td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={i.status} />
+                    </td>
                     <td className="px-4 py-3 text-xs">{userById(i.assignee)}</td>
-                    <td className="px-4 py-3"><StatusBadge status={i.sla} /></td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={i.sla} />
+                    </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{i.createdAt}</td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-0.5">
-                        {!i.assignee && <IconBtn label="Assign to me" icon={UserPlus} onClick={() => { i.assignee = "u1"; i.status = "Assigned"; toast.success(`${i.id} assigned`); }} />}
-                        {i.assignee && i.status !== "Closed" && i.status !== "Resolved" && <IconBtn label="Accept" icon={CheckCircle2} onClick={() => { i.status = "Accepted"; toast.success(`${i.id} accepted`); }} />}
-                        <IconBtn label="Comment" icon={MessageSquare} onClick={() => setActive(i)} />
-                        <IconBtn label="Attach evidence" icon={Upload} onClick={() => setActive(i)} />
-                        <IconBtn label="Attach report" icon={FileText} onClick={() => setActive(i)} />
-                        <IconBtn label="Escalate" icon={ArrowUpRight} onClick={() => { i.severity = "SEV-1"; toast.success(`${i.id} escalated to SEV-1`); }} />
+                        {canWork && !i.assignee && (
+                          <IconBtn
+                            label="Assign to me"
+                            icon={UserPlus}
+                            onClick={() => assignToMe(i)}
+                          />
+                        )}
+                        {canWork &&
+                          i.assignee &&
+                          i.status !== "Closed" &&
+                          i.status !== "Resolved" && (
+                            <IconBtn
+                              label="Accept"
+                              icon={CheckCircle2}
+                              onClick={() => acceptIncident(i)}
+                            />
+                          )}
+                        {canWork && (
+                          <IconBtn
+                            label="Comment"
+                            icon={MessageSquare}
+                            onClick={() => setActive(i)}
+                          />
+                        )}
+                        {canWork && (
+                          <IconBtn
+                            label="Attach evidence"
+                            icon={Upload}
+                            onClick={() => setActive(i)}
+                          />
+                        )}
+                        {canWork && (
+                          <IconBtn
+                            label="Attach report"
+                            icon={FileText}
+                            onClick={() => setActive(i)}
+                          />
+                        )}
+                        {canWork && i.status !== "Resolved" && i.status !== "Closed" && (
+                          <IconBtn
+                            label="Resolve"
+                            icon={CheckCircle2}
+                            onClick={() => resolveIncident(i)}
+                          />
+                        )}
+                        {canWork && (
+                          <IconBtn
+                            label="Escalate"
+                            icon={ArrowUpRight}
+                            onClick={() => escalateIncident(i)}
+                          />
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -145,21 +274,45 @@ function IncidentsPage() {
         kind="incident"
         open={!!active}
         onOpenChange={(v) => !v && setActive(null)}
-        item={active ? {
-          id: active.id, title: active.title, description: active.description,
-          status: active.status, severity: active.severity, sla: active.sla,
-          assignee: active.assignee, category: active.category, subcategory: active.subcategory,
-          createdAt: active.createdAt, source: active.source, sourceRef: active.sourceRef,
-          resolution: active.resolution,
-        } : null}
+        item={
+          active
+            ? {
+                id: active.id,
+                title: active.title,
+                description: active.description,
+                status: active.status,
+                severity: active.severity,
+                sla: active.sla,
+                assignee: active.assignee,
+                category: active.category,
+                subcategory: active.subcategory,
+                createdAt: active.createdAt,
+                source: active.source,
+                sourceRef: active.sourceRef,
+                resolution: active.resolution,
+              }
+            : null
+        }
       />
     </div>
   );
 }
 
-function IconBtn({ label, icon: Icon, onClick }: { label: string; icon: React.ComponentType<{ className?: string }>; onClick?: () => void }) {
+function IconBtn({
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  onClick?: () => void;
+}) {
   return (
-    <button title={label} onClick={onClick} className="rounded-md p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground">
+    <button
+      title={label}
+      onClick={onClick}
+      className="rounded-md p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground"
+    >
       <Icon className="h-3.5 w-3.5" />
     </button>
   );

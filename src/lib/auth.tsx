@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { users, type User, type Role } from "./mock-data";
+import { type User, type Role } from "./mock-data";
+import { authenticateMockUser, getMockUserById } from "./services";
+import { recordAuditLog } from "./audit-log";
 
 interface AuthState {
   user: User | null;
@@ -18,26 +20,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     const id = localStorage.getItem(STORAGE_KEY);
     if (id) {
-      const u = users.find((x) => x.id === id);
+      const u = getMockUserById(id);
       if (u) setUser(u);
     }
   }, []);
 
   const login = (username: string, password: string) => {
-    const u = users.find(
-      (x) => x.username.toLowerCase() === username.toLowerCase() && x.password === password,
-    );
+    const u = authenticateMockUser(username, password);
     if (u) {
       setUser(u);
       if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, u.id);
+      recordAuditLog({ actorId: u.id, action: "auth.login", entityType: "auth", entityId: u.id });
       return u;
     }
     return null;
   };
 
   const logout = () => {
+    const previousUser = user;
     setUser(null);
     if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
+    if (previousUser) {
+      recordAuditLog({
+        actorId: previousUser.id,
+        action: "auth.logout",
+        entityType: "auth",
+        entityId: previousUser.id,
+      });
+    }
   };
 
   return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
@@ -51,9 +61,13 @@ export function useAuth() {
 
 export function landingFor(role: Role): string {
   switch (role) {
-    case "engineer": return "/my-work";
-    case "manager": return "/dashboard";
-    case "executive": return "/dashboard";
-    case "admin": return "/admin";
+    case "engineer":
+      return "/my-work";
+    case "manager":
+      return "/dashboard";
+    case "executive":
+      return "/dashboard";
+    case "admin":
+      return "/admin";
   }
 }
