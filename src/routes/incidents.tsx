@@ -14,6 +14,7 @@ export const Route = createFileRoute("/incidents")({
 function IncidentsPage() {
   const [sevFilter, setSevFilter] = useState<Severity | "All">("All");
   const [search, setSearch] = useState("");
+  const [active, setActive] = useState<Incident | null>(null);
 
   const filtered = incidents.filter((i) => {
     if (sevFilter !== "All" && i.severity !== sevFilter) return false;
