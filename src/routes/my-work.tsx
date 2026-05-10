@@ -2,6 +2,7 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { PageHeader, KpiCard } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ShiftClockCard } from "@/components/ShiftClockCard";
 import { tasks, incidents, projectTasks, handoverPoints, shifts, userById } from "@/lib/mock-data";
 import { Briefcase, AlertTriangle, ListChecks, ClipboardList, Plus, FileWarning } from "lucide-react";
 
