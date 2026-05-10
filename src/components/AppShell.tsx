@@ -4,8 +4,12 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Briefcase, ListChecks, AlertTriangle, FolderKanban,
   CalendarDays, Repeat, ClipboardList, BookOpen, BarChart3, FileText,
-  ShieldCheck, LogOut, Activity, Search, Bell,
+  ShieldCheck, LogOut, Activity, Search, Bell, ChevronDown, LogIn, UserCircle2,
 } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Role } from "@/lib/mock-data";
 
 interface NavItem { to: string; label: string; icon: React.ComponentType<{ className?: string }>; roles: Role[]; }
@@ -107,6 +111,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Bell className="h-4 w-4" />
               <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-critical" />
             </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-sm hover:bg-muted">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-primary text-[11px] font-semibold">
+                  {user.name.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+                </div>
+                <div className="hidden md:block text-left leading-tight">
+                  <div className="text-xs font-medium">{user.name}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{user.role}</div>
+                </div>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Signed in as <span className="font-semibold">{user.username}</span></DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem><UserCircle2 className="h-4 w-4 mr-2" /> My profile</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate({ to: "/login" })}>
+                  <LogIn className="h-4 w-4 mr-2" /> Switch user
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { logout(); navigate({ to: "/login" }); }} className="text-critical focus:text-critical">
+                  <LogOut className="h-4 w-4 mr-2" /> Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
         <main className="flex-1 overflow-y-auto">{children}</main>

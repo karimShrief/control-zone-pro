@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { incidents, userById, type Severity, type IncidentCategory } from "@/lib/mock-data";
-import { Plus, AlertTriangle, UserPlus, CheckCircle2, ArrowUpRight } from "lucide-react";
+import { incidents, userById, type Incident, type Severity } from "@/lib/mock-data";
+import { Plus, AlertTriangle, UserPlus, CheckCircle2, ArrowUpRight, MessageSquare, Upload, FileText } from "lucide-react";
+import { DetailDrawer } from "@/components/DetailDrawer";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/incidents")({
   component: IncidentsPage,
@@ -12,6 +14,7 @@ export const Route = createFileRoute("/incidents")({
 function IncidentsPage() {
   const [sevFilter, setSevFilter] = useState<Severity | "All">("All");
   const [search, setSearch] = useState("");
+  const [active, setActive] = useState<Incident | null>(null);
 
   const filtered = incidents.filter((i) => {
     if (sevFilter !== "All" && i.severity !== sevFilter) return false;
@@ -104,7 +107,7 @@ function IncidentsPage() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.map((i) => (
-                  <tr key={i.id} className="hover:bg-muted/40">
+                  <tr key={i.id} className="hover:bg-muted/40 cursor-pointer" onClick={() => setActive(i)}>
                     <td className="px-4 py-3"><StatusBadge status={i.severity} /></td>
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{i.id}</td>
                     <td className="px-4 py-3">
@@ -120,11 +123,14 @@ function IncidentsPage() {
                     <td className="px-4 py-3 text-xs">{userById(i.assignee)}</td>
                     <td className="px-4 py-3"><StatusBadge status={i.sla} /></td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{i.createdAt}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        {!i.assignee && <IconBtn label="Assign" icon={UserPlus} />}
-                        {i.assignee && i.status !== "Closed" && i.status !== "Resolved" && <IconBtn label="Accept" icon={CheckCircle2} />}
-                        <IconBtn label="Escalate" icon={ArrowUpRight} />
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-0.5">
+                        {!i.assignee && <IconBtn label="Assign to me" icon={UserPlus} onClick={() => { i.assignee = "u1"; i.status = "Assigned"; toast.success(`${i.id} assigned`); }} />}
+                        {i.assignee && i.status !== "Closed" && i.status !== "Resolved" && <IconBtn label="Accept" icon={CheckCircle2} onClick={() => { i.status = "Accepted"; toast.success(`${i.id} accepted`); }} />}
+                        <IconBtn label="Comment" icon={MessageSquare} onClick={() => setActive(i)} />
+                        <IconBtn label="Attach evidence" icon={Upload} onClick={() => setActive(i)} />
+                        <IconBtn label="Attach report" icon={FileText} onClick={() => setActive(i)} />
+                        <IconBtn label="Escalate" icon={ArrowUpRight} onClick={() => { i.severity = "SEV-1"; toast.success(`${i.id} escalated to SEV-1`); }} />
                       </div>
                     </td>
                   </tr>
@@ -134,13 +140,26 @@ function IncidentsPage() {
           </div>
         </div>
       </div>
+
+      <DetailDrawer
+        kind="incident"
+        open={!!active}
+        onOpenChange={(v) => !v && setActive(null)}
+        item={active ? {
+          id: active.id, title: active.title, description: active.description,
+          status: active.status, severity: active.severity, sla: active.sla,
+          assignee: active.assignee, category: active.category, subcategory: active.subcategory,
+          createdAt: active.createdAt, source: active.source, sourceRef: active.sourceRef,
+          resolution: active.resolution,
+        } : null}
+      />
     </div>
   );
 }
 
-function IconBtn({ label, icon: Icon }: { label: string; icon: React.ComponentType<{ className?: string }> }) {
+function IconBtn({ label, icon: Icon, onClick }: { label: string; icon: React.ComponentType<{ className?: string }>; onClick?: () => void }) {
   return (
-    <button title={label} className="rounded-md p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground">
+    <button title={label} onClick={onClick} className="rounded-md p-1.5 hover:bg-muted text-muted-foreground hover:text-foreground">
       <Icon className="h-3.5 w-3.5" />
     </button>
   );
