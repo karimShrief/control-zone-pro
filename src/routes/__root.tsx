@@ -118,10 +118,12 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AppShell>
-          <Outlet />
-        </AppShell>
-        <Toaster />
+        <ShiftClockProvider>
+          <AppShell>
+            <Outlet />
+          </AppShell>
+          <Toaster />
+        </ShiftClockProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
