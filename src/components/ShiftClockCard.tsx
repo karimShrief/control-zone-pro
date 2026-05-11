@@ -2,10 +2,15 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useShiftClock, fmtTime, fmtDuration, durationMinutes } from "@/lib/shift-clock";
 import { Sun, Moon, LogIn, LogOut, Clock, CheckCircle2 } from "lucide-react";
-import { shifts } from "@/lib/mock-data";
+import { shiftService } from "@/lib/services";
 import { toast } from "sonner";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 
 export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
@@ -19,7 +24,9 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
   if (!user || user.role !== "engineer") return null;
 
   const today = new Date().toISOString().slice(0, 10);
-  const scheduled = shifts.find((s) => s.date === today && s.engineers.includes(user.id));
+  const scheduled = shiftService
+    .listSchedule()
+    .find((s) => s.date === today && s.engineers.includes(user.id));
   const entry = todayFor(user.id);
   const onShift = !!entry?.signInAt && !entry?.signOutAt;
   const completed = !!entry?.signInAt && !!entry?.signOutAt;
@@ -28,24 +35,34 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
   const doIn = () => {
     signIn(user.id, shift, note.trim() || undefined);
     toast.success(`Signed in to ${shift} shift`);
-    setOpenIn(false); setNote("");
+    setOpenIn(false);
+    setNote("");
   };
   const doOut = () => {
     signOut(user.id, note.trim() || undefined);
     toast.success("Signed out · shift complete");
-    setOpenOut(false); setNote("");
+    setOpenOut(false);
+    setNote("");
   };
 
   return (
-    <div className={`rounded-lg border bg-card p-4 ${onShift ? "border-success/40" : "border-border"}`}>
+    <div
+      className={`rounded-lg border bg-card p-4 ${onShift ? "border-success/40" : "border-border"}`}
+    >
       <div className="flex items-start justify-between mb-3">
         <div>
           <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" /> Shift Clock
           </div>
           <div className="mt-1 flex items-center gap-2">
-            {scheduled?.type === "Night" ? <Moon className="h-4 w-4 text-info" /> : <Sun className="h-4 w-4 text-warning-foreground" />}
-            <span className="font-semibold">{scheduled?.type ?? "Off-shift"} · {today}</span>
+            {scheduled?.type === "Night" ? (
+              <Moon className="h-4 w-4 text-info" />
+            ) : (
+              <Sun className="h-4 w-4 text-warning-foreground" />
+            )}
+            <span className="font-semibold">
+              {scheduled?.type ?? "Off-shift"} · {today}
+            </span>
           </div>
         </div>
         <StatusPill state={onShift ? "on" : completed ? "done" : "off"} />
@@ -54,12 +71,18 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
       {entry ? (
         <div className="grid grid-cols-3 gap-2 text-center mb-3">
           <Stat label="Sign-in" value={fmtTime(entry.signInAt)} />
-          <Stat label={onShift ? "Live" : "Duration"} value={fmtDuration(onShift ? live : durationMinutes(entry.signInAt, entry.signOutAt))} highlight={onShift} />
+          <Stat
+            label={onShift ? "Live" : "Duration"}
+            value={fmtDuration(onShift ? live : durationMinutes(entry.signInAt, entry.signOutAt))}
+            highlight={onShift}
+          />
           <Stat label="Sign-out" value={fmtTime(entry.signOutAt)} />
         </div>
       ) : (
         <div className="text-xs text-muted-foreground mb-3">
-          {scheduled ? "You haven't signed in yet for today's shift." : "You're not on the roster today. You can still sign in if covering."}
+          {scheduled
+            ? "You haven't signed in yet for today's shift."
+            : "You're not on the roster today. You can still sign in if covering."}
         </div>
       )}
 
@@ -72,7 +95,10 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
       <div className="flex items-center gap-2">
         {!onShift && !completed && (
           <button
-            onClick={() => { setShift(scheduled?.type ?? "Morning"); setOpenIn(true); }}
+            onClick={() => {
+              setShift(scheduled?.type ?? "Morning");
+              setOpenIn(true);
+            }}
             className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-success/15 text-success border border-success/30 px-3 py-2 text-sm font-medium hover:bg-success/20"
           >
             <LogIn className="h-4 w-4" /> Sign in
@@ -98,28 +124,61 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Sign in to shift</DialogTitle>
-            <DialogDescription>Confirm your shift and add an optional opening note for the team.</DialogDescription>
+            <DialogDescription>
+              Confirm your shift and add an optional opening note for the team.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-xs uppercase tracking-wider text-muted-foreground">Shift</label>
+              <label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Shift
+              </label>
               <div className="mt-1.5 grid grid-cols-2 gap-2">
                 {(["Morning", "Night"] as const).map((s) => (
-                  <button key={s} onClick={() => setShift(s)} className={`rounded-md border px-3 py-2 text-sm inline-flex items-center justify-center gap-2 ${shift === s ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted"}`}>
-                    {s === "Morning" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />} {s}
+                  <button
+                    key={s}
+                    onClick={() => setShift(s)}
+                    className={`rounded-md border px-3 py-2 text-sm inline-flex items-center justify-center gap-2 ${shift === s ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted"}`}
+                  >
+                    {s === "Morning" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}{" "}
+                    {s}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <label className="text-xs uppercase tracking-wider text-muted-foreground">Opening note (optional)</label>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Handover acknowledged, status of open items…" className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm resize-none" />
+              <label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Opening note (optional)
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                placeholder="Handover acknowledged, status of open items…"
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm resize-none"
+              />
             </div>
-            <div className="text-xs text-muted-foreground">Sign-in time will be recorded as <span className="font-medium text-foreground">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>.</div>
+            <div className="text-xs text-muted-foreground">
+              Sign-in time will be recorded as{" "}
+              <span className="font-medium text-foreground">
+                {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              .
+            </div>
           </div>
           <DialogFooter>
-            <button onClick={() => setOpenIn(false)} className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Cancel</button>
-            <button onClick={doIn} className="rounded-md bg-success text-success-foreground px-3 py-2 text-sm hover:opacity-90 inline-flex items-center gap-1.5"><LogIn className="h-4 w-4" /> Confirm sign-in</button>
+            <button
+              onClick={() => setOpenIn(false)}
+              className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={doIn}
+              className="rounded-md bg-success text-success-foreground px-3 py-2 text-sm hover:opacity-90 inline-flex items-center gap-1.5"
+            >
+              <LogIn className="h-4 w-4" /> Confirm sign-in
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -129,21 +188,45 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Sign out of shift</DialogTitle>
-            <DialogDescription>Wrap up your shift with a closing note for the next team.</DialogDescription>
+            <DialogDescription>
+              Wrap up your shift with a closing note for the next team.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2 text-center">
               <Stat label="Sign-in" value={fmtTime(entry?.signInAt ?? null)} />
-              <Stat label="On shift" value={fmtDuration(durationMinutes(entry?.signInAt ?? null, null))} highlight />
+              <Stat
+                label="On shift"
+                value={fmtDuration(durationMinutes(entry?.signInAt ?? null, null))}
+                highlight
+              />
             </div>
             <div>
-              <label className="text-xs uppercase tracking-wider text-muted-foreground">Closing note</label>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={4} placeholder="Open incidents, pending tasks, anything next shift should know…" className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm resize-none" />
+              <label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Closing note
+              </label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={4}
+                placeholder="Open incidents, pending tasks, anything next shift should know…"
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm resize-none"
+              />
             </div>
           </div>
           <DialogFooter>
-            <button onClick={() => setOpenOut(false)} className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted">Cancel</button>
-            <button onClick={doOut} className="rounded-md bg-critical text-critical-foreground px-3 py-2 text-sm hover:opacity-90 inline-flex items-center gap-1.5"><LogOut className="h-4 w-4" /> Confirm sign-out</button>
+            <button
+              onClick={() => setOpenOut(false)}
+              className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={doOut}
+              className="rounded-md bg-critical text-critical-foreground px-3 py-2 text-sm hover:opacity-90 inline-flex items-center gap-1.5"
+            >
+              <LogOut className="h-4 w-4" /> Confirm sign-out
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -153,21 +236,35 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
 
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className={`rounded-md border px-2 py-1.5 ${highlight ? "border-success/40 bg-success/10" : "border-border bg-muted/30"}`}>
+    <div
+      className={`rounded-md border px-2 py-1.5 ${highlight ? "border-success/40 bg-success/10" : "border-border bg-muted/30"}`}
+    >
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={`text-sm font-semibold tabular-nums ${highlight ? "text-success" : ""}`}>{value}</div>
+      <div className={`text-sm font-semibold tabular-nums ${highlight ? "text-success" : ""}`}>
+        {value}
+      </div>
     </div>
   );
 }
 
 function StatusPill({ state }: { state: "on" | "off" | "done" }) {
   const map = {
-    on: { cls: "bg-success/15 text-success border-success/30", label: "On shift", dot: "bg-success animate-pulse" },
-    off: { cls: "bg-muted text-muted-foreground border-border", label: "Off shift", dot: "bg-muted-foreground" },
+    on: {
+      cls: "bg-success/15 text-success border-success/30",
+      label: "On shift",
+      dot: "bg-success animate-pulse",
+    },
+    off: {
+      cls: "bg-muted text-muted-foreground border-border",
+      label: "Off shift",
+      dot: "bg-muted-foreground",
+    },
     done: { cls: "bg-info/15 text-info border-info/30", label: "Completed", dot: "bg-info" },
   }[state];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium ${map.cls}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium ${map.cls}`}
+    >
       <span className={`h-1.5 w-1.5 rounded-full ${map.dot}`} /> {map.label}
     </span>
   );

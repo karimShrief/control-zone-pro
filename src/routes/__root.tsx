@@ -80,7 +80,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "Unified operations platform for Data Center and NOC teams" },
       { name: "author", content: "Ops Command" },
       { property: "og:title", content: "Ops Command Platform" },
-      { property: "og:description", content: "Unified operations platform for Data Center and NOC teams" },
+      {
+        property: "og:description",
+        content: "Unified operations platform for Data Center and NOC teams",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
