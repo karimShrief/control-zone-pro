@@ -1,10 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById, type Incident, type Severity } from "@/lib/mock-data";
+import {
+  userById,
+  type Incident,
+  type IncidentCategory,
+  type IncidentSource,
+  type Severity,
+} from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth";
 import { canCreateIncidents, canWorkIncidents } from "@/lib/rbac";
+import { backendClient } from "@/lib/backend-client";
 import { incidentService } from "@/lib/services";
 import {
   Plus,
@@ -15,6 +22,7 @@ import {
   MessageSquare,
   Upload,
   FileText,
+  Activity,
 } from "lucide-react";
 import { DetailDrawer } from "@/components/DetailDrawer";
 import { toast } from "sonner";
@@ -23,55 +31,144 @@ export const Route = createFileRoute("/incidents")({
   component: IncidentsPage,
 });
 
+const incidentSources: IncidentSource[] = [
+  "Manual",
+  "Monitoring Alert",
+  "Handover",
+  "Project Issue",
+  "ITSM Ticket Mock",
+];
+const incidentCategories: IncidentCategory[] = [
+  "Network",
+  "Server",
+  "Storage",
+  "Power",
+  "Cooling",
+  "Security",
+  "Access",
+  "Application",
+  "Unknown",
+];
+
 function IncidentsPage() {
   const { user } = useAuth();
-  const [rows, setRows] = useState(() => incidentService.list());
+  const [rows, setRows] = useState<Incident[]>(() => incidentService.list());
+  const [isCreating, setIsCreating] = useState(false);
+  const [draft, setDraft] = useState<
+    Pick<Incident, "title" | "description" | "source" | "category">
+  >({
+    title: "",
+    description: "",
+    source: "Manual",
+    category: "Unknown",
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [sevFilter, setSevFilter] = useState<Severity | "All">("All");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<Incident | null>(null);
 
   const canCreate = canCreateIncidents(user);
   const canWork = canWorkIncidents(user);
-  const refresh = () => setRows(incidentService.list());
 
-  const assignToMe = (incident: Incident) => {
-    if (!user || !canWork) return;
-    incidentService.assignTo(incident.id, user.id, user.id);
+  useEffect(() => {
     refresh();
-    toast.success(`${incident.id} assigned`);
+  }, []);
+
+  const refresh = async () => {
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const response = await backendClient.listIncidents();
+      setRows(response.rows);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load incidents";
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const acceptIncident = (incident: Incident) => {
+  const assignToMe = async (incident: Incident) => {
     if (!user || !canWork) return;
-    incidentService.updateStatus(incident.id, "Accepted", user.id);
-    refresh();
-    toast.success(`${incident.id} accepted`);
+    try {
+      const response = await backendClient.assignIncident(user.id, incident.id, user.id);
+      setRows(response.rows);
+      toast.success(`${incident.id} assigned`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to assign incident");
+    }
   };
 
-  const escalateIncident = (incident: Incident) => {
+  const acceptIncident = async (incident: Incident) => {
     if (!user || !canWork) return;
-    incidentService.escalate(incident.id, user.id);
-    refresh();
-    toast.success(`${incident.id} escalated to SEV-1`);
+    try {
+      const response = await backendClient.updateIncidentStatus(user.id, incident.id, "Accepted");
+      setRows(response.rows);
+      toast.success(`${incident.id} accepted`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to accept incident");
+    }
   };
 
-  const createIncident = () => {
+  const progressIncident = async (incident: Incident) => {
+    if (!user || !canWork) return;
+    try {
+      const response = await backendClient.updateIncidentStatus(
+        user.id,
+        incident.id,
+        "In Progress",
+      );
+      setRows(response.rows);
+      toast.success(`${incident.id} in progress`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to progress incident");
+    }
+  };
+
+  const escalateIncident = async (incident: Incident) => {
+    if (!user || !canWork) return;
+    try {
+      const response = await backendClient.escalateIncident(user.id, incident.id);
+      setRows(response.rows);
+      toast.success(`${incident.id} escalated to SEV-1`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to escalate incident");
+    }
+  };
+
+  const createIncident = async () => {
     if (!user || !canCreate) return;
-    const incident = incidentService.create(user.id, {
-      title: "Manual incident",
-      description: "Mock incident created from the existing Create Incident action",
-      source: "Manual",
-      category: "Unknown",
-    });
-    refresh();
-    if (incident) toast.success(`${incident.id} created`);
+    if (!draft.title.trim() || !draft.description.trim()) {
+      toast.error("Incident title and description are required.");
+      return;
+    }
+    try {
+      const response = await backendClient.createIncident(user.id, {
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        source: draft.source,
+        category: draft.category,
+      });
+      setRows(response.rows);
+      setDraft({ title: "", description: "", source: "Manual", category: "Unknown" });
+      setIsCreating(false);
+      toast.success(`${response.incident.id} created`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create incident");
+    }
   };
 
-  const resolveIncident = (incident: Incident) => {
+  const resolveIncident = async (incident: Incident) => {
     if (!user || !canWork) return;
-    incidentService.updateStatus(incident.id, "Resolved", user.id);
-    refresh();
-    toast.success(`${incident.id} resolved`);
+    try {
+      const response = await backendClient.updateIncidentStatus(user.id, incident.id, "Resolved");
+      setRows(response.rows);
+      toast.success(`${incident.id} resolved`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to resolve incident");
+    }
   };
 
   const filtered = rows.filter((i) => {
@@ -98,14 +195,96 @@ function IncidentsPage() {
         actions={
           canCreate ? (
             <button
-              onClick={createIncident}
+              onClick={() => setIsCreating((current) => !current)}
               className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90"
             >
-              <Plus className="h-4 w-4" /> Create Incident
+              <Plus className="h-4 w-4" /> {isCreating ? "Close Form" : "Create Incident"}
             </button>
           ) : null
         }
       />
+
+      {loadError && (
+        <div className="mb-4 rounded-md border border-critical/30 bg-critical/5 px-3 py-2 text-sm text-critical">
+          {loadError}
+        </div>
+      )}
+
+      {canCreate && isCreating && (
+        <section className="mb-6 rounded-lg border border-border bg-card p-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="xl:col-span-2">
+              <label className="text-xs text-muted-foreground">Title</label>
+              <input
+                value={draft.title}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, title: event.target.value }))
+                }
+                placeholder="Short incident title"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Source</label>
+              <select
+                value={draft.source}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    source: event.target.value as IncidentSource,
+                  }))
+                }
+                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+              >
+                {incidentSources.map((source) => (
+                  <option key={source} value={source}>
+                    {source}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Category</label>
+              <select
+                value={draft.category}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    category: event.target.value as IncidentCategory,
+                  }))
+                }
+                className="mt-1 w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+              >
+                {incidentCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2 xl:col-span-4">
+              <label className="text-xs text-muted-foreground">Description</label>
+              <textarea
+                value={draft.description}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, description: event.target.value }))
+                }
+                placeholder="What happened, where, and what is the operational impact?"
+                rows={3}
+                className="mt-1 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={createIncident}
+              className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" /> Add Incident
+            </button>
+          </div>
+        </section>
+      )}
 
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 lg:col-span-3 space-y-4">
@@ -179,6 +358,26 @@ function IncidentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
+                {isLoading && (
+                  <tr>
+                    <td
+                      colSpan={10}
+                      className="px-4 py-6 text-center text-sm text-muted-foreground"
+                    >
+                      Loading latest incidents...
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && filtered.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={10}
+                      className="px-4 py-6 text-center text-sm text-muted-foreground"
+                    >
+                      No incidents match the current filters.
+                    </td>
+                  </tr>
+                )}
                 {filtered.map((i) => (
                   <tr
                     key={i.id}
@@ -223,6 +422,15 @@ function IncidentsPage() {
                               label="Accept"
                               icon={CheckCircle2}
                               onClick={() => acceptIncident(i)}
+                            />
+                          )}
+                        {canWork &&
+                          i.assignee &&
+                          !["In Progress", "Resolved", "Closed"].includes(i.status) && (
+                            <IconBtn
+                              label="Progress"
+                              icon={Activity}
+                              onClick={() => progressIncident(i)}
                             />
                           )}
                         {canWork && (
@@ -293,6 +501,7 @@ function IncidentsPage() {
               }
             : null
         }
+        onUpdated={refresh}
       />
     </div>
   );

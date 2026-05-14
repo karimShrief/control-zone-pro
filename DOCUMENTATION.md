@@ -4,7 +4,9 @@
 
 Ops Command Platform is a TanStack Start + React operations platform for Data Center and NOC teams. The application was generated with Lovable and uses the existing Lovable UI, role-based navigation, and operational pages as the product shell.
 
-The current implementation is backend-ready but still mock-backed. Domain mutations are centralized through a lightweight service layer so future backend adapters can replace mock arrays without redesigning the UI.
+The current implementation is a server-backed team demo. The main operational mutations now go through `/api` routes on the TanStack Start server, with role checks enforced server-side. The backing store is still the mock domain store, so data is shared while the dev server is running and resets when the server restarts.
+
+For backend details, supported endpoints, and team run instructions, see `BACKEND.md`.
 
 ## Technology stack
 
@@ -32,7 +34,8 @@ src/
     ui/                   Reusable UI primitives
   lib/
     audit-log.ts          In-memory audit log helpers
-    auth.tsx              Auth context, login/logout, role landing helper
+    auth.tsx              Auth context, API-backed login/logout, role landing helper
+    backend-client.ts     Typed frontend client for /api workflows
     mock-data.ts          Mock users and operational domain data
     rbac.ts               Route/action role checks
     services.ts           Mock service layer for domain operations
@@ -55,6 +58,9 @@ src/
     productivity.tsx      Team productivity analytics
     reports.tsx           Reports catalog
     admin.tsx             Admin configuration UI
+  server/
+    api.ts                API router, validation, and server-side RBAC
+  server.ts               SSR wrapper and /api request entry
 ```
 
 ## Running the app
@@ -75,6 +81,12 @@ Start development server:
 
 ```bash
 bun run dev -- --host 0.0.0.0
+```
+
+Team server command:
+
+```bash
+npm run dev:team
 ```
 
 Open:
@@ -99,24 +111,22 @@ http://localhost:4173/
 ## Validation commands
 
 ```bash
-npx tsc --noEmit
-bun run lint
-bun run build
-bun test
+npm run lint
+npm run build
 ```
 
-Current note: `bun test` reports no matching tests until test files are added.
+Current note: there is no `test` script in `package.json` yet.
 
 ## Authentication model
 
 Authentication is mock username/password authentication. The app stores the logged-in user id in browser local storage and restores the user from mock data on reload.
 
-| Role | Username | Password | Landing page |
-| --- | --- | --- | --- |
-| Engineer | `ahmed` | `demo` | `/my-work` |
-| Manager | `manager` | `demo` | `/dashboard` |
-| Executive | `exec` | `demo` | `/dashboard` |
-| Admin | `admin` | `demo` | `/admin` |
+| Role      | Username  | Password | Landing page |
+| --------- | --------- | -------- | ------------ |
+| Engineer  | `ahmed`   | `demo`   | `/my-work`   |
+| Manager   | `manager` | `demo`   | `/dashboard` |
+| Executive | `exec`    | `demo`   | `/dashboard` |
+| Admin     | `admin`   | `demo`   | `/admin`     |
 
 Additional engineer accounts: `khalid`, `saeed`, `omar`, `hassan`, and `yousef`, all using password `demo`.
 
@@ -126,38 +136,40 @@ RBAC is centralized in `src/lib/rbac.ts`.
 
 ### Route-level access
 
-| Route prefix | Allowed roles |
-| --- | --- |
-| `/dashboard` | Manager, Executive, Admin |
-| `/my-work` | Engineer |
-| `/tasks` | Engineer, Manager, Admin |
-| `/incidents` | Engineer, Manager, Executive, Admin |
-| `/projects` | Engineer, Manager, Executive, Admin |
-| `/shifts` | Engineer, Manager, Admin |
-| `/shift-requests` | Engineer, Manager, Admin |
-| `/handover` | Engineer, Manager, Admin |
-| `/sop` | Engineer, Manager, Executive, Admin |
-| `/productivity` | Manager, Executive, Admin |
-| `/reports` | Manager, Executive, Admin |
-| `/admin` | Admin |
+| Route prefix      | Allowed roles                       |
+| ----------------- | ----------------------------------- |
+| `/dashboard`      | Manager, Executive, Admin           |
+| `/my-work`        | Engineer                            |
+| `/tasks`          | Engineer, Manager, Admin            |
+| `/incidents`      | Engineer, Manager, Executive, Admin |
+| `/projects`       | Engineer, Manager, Executive, Admin |
+| `/shifts`         | Engineer, Manager, Admin            |
+| `/shift-requests` | Engineer, Manager, Admin            |
+| `/handover`       | Engineer, Manager, Admin            |
+| `/sop`            | Engineer, Manager, Executive, Admin |
+| `/productivity`   | Manager, Executive, Admin           |
+| `/reports`        | Manager, Executive, Admin           |
+| `/admin`          | Admin                               |
 
 `AppShell` enforces route access for direct navigation. If no user is logged in, users are redirected to `/login`. If a logged-in user accesses a disallowed route, they are redirected to their role landing page.
 
 ### Action-level access
 
-| Action | Allowed roles / rules |
-| --- | --- |
-| Task manage/read actions | Engineer, Manager, Admin |
-| Task edit | Manager/Admin, or Engineer if assigned to self or shared |
-| Incident create/work actions | Engineer, Manager, Admin |
-| Shift request submit | Engineer |
-| Shift request approve/reject | Manager, Admin |
-| Handover submit | Engineer |
-| Handover audit/review | Manager, Admin |
-| SOP create/manage | Manager, Admin |
-| SOP read/download | All roles with SOP route access |
-| Project manage/add task | Manager, Admin |
-| Project task progress edit | Manager/Admin, or assigned Engineer |
+| Action                       | Allowed roles / rules                                                 |
+| ---------------------------- | --------------------------------------------------------------------- |
+| Task manage/read actions     | Engineer, Manager, Admin                                              |
+| Task create                  | Manager, Admin                                                        |
+| Task edit                    | Manager/Admin, or Engineer if assigned, shared, or Daily DC Operation |
+| Incident create/work actions | Engineer, Manager, Admin                                              |
+| Shift request submit         | Engineer                                                              |
+| Shift request approve/reject | Manager, Admin                                                        |
+| Handover submit              | Engineer                                                              |
+| Handover audit/review        | Manager, Admin                                                        |
+| Admin user management        | Admin                                                                 |
+| SOP create/manage            | Manager, Admin                                                        |
+| SOP read/download            | All roles with SOP route access                                       |
+| Project manage/add task      | Manager, Admin                                                        |
+| Project task progress edit   | Manager/Admin, or assigned Engineer                                   |
 
 ## Service layer
 
@@ -168,9 +180,17 @@ Domain logic lives in `src/lib/services.ts`. The service layer is intentionally 
 - `authenticateMockUser(username, password)`
 - `getMockUserById(userId)`
 
+### User service
+
+- `userService.list()`
+- `userService.create(actorId, input)`
+- `userService.update(userId, actorId, input)`
+
 ### Task service
 
 - `taskService.list()`
+- `taskService.get(taskId)`
+- `taskService.create(actorId)`
 - `taskService.updateStatus(taskId, status, actorId)`
 - `taskService.assignTo(taskId, assigneeId, actorId)`
 
@@ -201,13 +221,15 @@ Shift clock sign-in/sign-out state is managed in `src/lib/shift-clock.tsx` and p
 ### Shift request service
 
 - `shiftRequestService.list()`
+- `shiftRequestService.create(actorId, input)`
 - `shiftRequestService.updateStatus(requestId, status, actorId)`
 
 ### Handover service
 
 - `handoverService.list()`
-- `handoverService.create(actorId, shift)`
+- `handoverService.create(actorId, input)`
 - `handoverService.updateAudit(handoverId, audit, actorId)`
+- `handoverService.acknowledge(handoverId, actorId)`
 
 ### SOP service
 
@@ -239,6 +261,8 @@ Examples of audited actions:
 - shift sign-in/sign-out
 - shift request approve/reject
 - handover create/audit update
+- handover acknowledgement
+- user create/update
 - SOP download
 
 ## Page documentation
@@ -266,12 +290,14 @@ Managers see command-level operational KPIs. Executives see executive dashboard 
 Route: `/tasks`
 
 Supports task filtering, table review, task details, status updates, evidence/comment interactions, escalation, and manager/admin assignment actions. Engineer edit actions are limited to assigned or shared tasks.
+Manager/admin users can create a mock operations task from the existing Add Task action.
 
 ### Incidents
 
 Route: `/incidents`
 
 Supports incident filtering by severity/source/category, mock incident creation, assignment, acceptance, resolution, escalation, comments, evidence, and report attachments. Executives can access incidents in read-only mode.
+Incident status can move through assigned, accepted, in progress, resolved, and closed states.
 
 ### Projects
 
@@ -298,7 +324,7 @@ Engineers can submit shift requests. Managers/admins can approve or reject pendi
 
 Route: `/handover`
 
-Engineers can submit handover points. Managers/admins can review and mark handover points as approved or needing updates.
+Engineers can submit multiple handover points. Managers/admins can acknowledge, approve, or mark handover points as needing updates. Managers cannot submit handover points.
 
 ### SOP Library
 
@@ -322,7 +348,7 @@ Shows report cards and mock preview/export actions.
 
 Route: `/admin`
 
-Shows users, roles, teams, categories, shift settings, and system configuration views. Admin-only route.
+Shows users, roles, teams, categories, shift settings, and system configuration views. Admin users can add mock users and update user role/team values.
 
 ## Manual testing checklist
 
@@ -341,13 +367,13 @@ Use `TESTING.md` for detailed step-by-step scenarios. Minimum smoke test:
 
 ## Known limitations
 
-- No real backend is connected yet.
-- Mock array data resets on app reload or server restart.
+- The prototype uses a local server API backed by in-memory mock data.
+- Mock array data resets on server restart.
 - Shift clock state uses browser local storage.
 - Audit logs are in-memory and reset on reload/restart.
 - File attachments and SOP downloads are mock UI interactions.
 - There are no formal automated test files yet.
-- Service methods are frontend-only and should not be treated as security boundaries once a real backend is added.
+- The demo `actorId` request model should not be treated as production authentication.
 
 ## Backend integration notes
 

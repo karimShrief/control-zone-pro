@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { userById, type Task, type TaskType, type TaskStatus } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth";
 import { canEditTask, canManageTasks } from "@/lib/rbac";
+import { backendClient } from "@/lib/backend-client";
 import { taskService } from "@/lib/services";
 import {
   Plus,
@@ -34,28 +35,59 @@ const TYPES: (TaskType | "All")[] = [
 
 function TasksPage() {
   const { user } = useAuth();
-  const [rows, setRows] = useState(() => taskService.list());
+  const [rows, setRows] = useState<Task[]>(() => taskService.list());
   const [typeFilter, setTypeFilter] = useState<TaskType | "All">("All");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [active, setActive] = useState<Task | null>(null);
 
   const canUpdate = canManageTasks(user);
+  const canCreate = ["manager", "admin"].includes(user?.role ?? "");
 
-  const refresh = () => setRows(taskService.list());
-
-  const escalateTask = (task: Task) => {
-    if (!user || !canEditTask(user, task)) return;
-    taskService.updateStatus(task.id, "Escalated", user.id);
+  useEffect(() => {
     refresh();
-    toast.success(`${task.id} escalated`);
+  }, []);
+
+  const refresh = async () => {
+    try {
+      const response = await backendClient.listTasks();
+      setRows(response.rows);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to load tasks");
+    }
   };
 
-  const assignTask = (task: Task) => {
+  const escalateTask = async (task: Task) => {
+    if (!user || !canEditTask(user, task)) return;
+    try {
+      const response = await backendClient.updateTaskStatus(user.id, task.id, "Escalated");
+      setRows(response.rows);
+      toast.success(`${task.id} escalated`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to escalate task");
+    }
+  };
+
+  const assignTask = async (task: Task) => {
     if (!user || !["manager", "admin"].includes(user.role)) return;
-    taskService.assignTo(task.id, "u1", user.id);
-    refresh();
-    toast.success(`${task.id} assigned to Ahmed`);
+    try {
+      const response = await backendClient.assignTask(user.id, task.id, "u1");
+      setRows(response.rows);
+      toast.success(`${task.id} assigned to Ahmed`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to assign task");
+    }
+  };
+
+  const createTask = async () => {
+    if (!user || !canCreate) return;
+    try {
+      const response = await backendClient.createTask(user.id);
+      setRows(response.rows);
+      toast.success(`${response.task.id} created`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create task");
+    }
   };
 
   const filtered = rows.filter((t) => {
@@ -78,9 +110,14 @@ function TasksPage() {
         title="Tasks"
         subtitle="Daily DC operations, NOC tasks, DC tasks and general work"
         actions={
-          <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
-            <Plus className="h-4 w-4" /> Add Task
-          </button>
+          canCreate ? (
+            <button
+              onClick={createTask}
+              className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" /> Add Task
+            </button>
+          ) : null
         }
       />
 
@@ -267,6 +304,7 @@ function TasksPage() {
               }
             : null
         }
+        onUpdated={refresh}
       />
     </div>
   );

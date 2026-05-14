@@ -1,10 +1,11 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById, type ProjectTask } from "@/lib/mock-data";
+import { userById, type Project, type ProjectTask } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth";
 import { canEditProjectTask, canManageProjects } from "@/lib/rbac";
+import { backendClient } from "@/lib/backend-client";
 import { projectService } from "@/lib/services";
 import { ArrowLeft, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -18,32 +19,68 @@ const TABS = ["Overview", "Tasks", "Kanban", "Timeline", "Risks", "Comments", "E
 function ProjectDetail() {
   const { projectId } = Route.useParams();
   const { user } = useAuth();
-  const project = projectService.get(projectId);
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
-  const [rows, setRows] = useState(() => projectService.listTasks(projectId));
+  const [project, setProject] = useState<Project | null>(() => projectService.get(projectId));
+  const [rows, setRows] = useState<ProjectTask[]>(() => projectService.listTasks(projectId));
+  const [isMissing, setIsMissing] = useState(false);
+  const [tab, setTab] = useState<(typeof TABS)[number]>("Tasks");
+  const [isLoading, setIsLoading] = useState(false);
 
-  if (!project) return <Navigate to="/projects" />;
+  useEffect(() => {
+    refresh();
+  }, [projectId]);
+
+  if (isMissing) return <Navigate to="/projects" />;
+  if (!project) {
+    return (
+      <div className="p-6 max-w-[1600px] mx-auto text-sm text-muted-foreground">
+        Loading project...
+      </div>
+    );
+  }
+
   const subs = rows;
   const canManage = canManageProjects(user);
 
-  const refresh = () => setRows(projectService.listTasks(project.id));
+  async function refresh() {
+    setIsLoading(true);
+    try {
+      const response = await backendClient.getProject(projectId);
+      setProject(response.project);
+      setRows(response.tasks);
+      setIsMissing(false);
+    } catch {
+      setIsMissing(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
-  const addProjectTask = () => {
+  const addProjectTask = async () => {
     if (!user || !canManage) return;
-    const task = projectService.createTask(project.id, user.id);
-    refresh();
-    if (task) toast.success(`${task.id} added`);
+    try {
+      const response = await backendClient.createProjectTask(user.id, project.id);
+      setRows(response.rows);
+      if (response.project) setProject(response.project);
+      toast.success(`${response.task.id} added`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to add project task");
+    }
   };
 
-  const updateProgress = (task: ProjectTask) => {
+  const updateProgress = async (task: ProjectTask) => {
     if (!user || !canEditProjectTask(user, task)) return;
-    projectService.updateTaskProgress(
-      task.id,
-      task.completion >= 100 ? 100 : task.completion + 25,
-      user.id,
-    );
-    refresh();
-    toast.success(`${task.id} progress updated`);
+    try {
+      const response = await backendClient.updateProjectTaskProgress(
+        user.id,
+        task.id,
+        task.completion >= 100 ? 100 : task.completion + 25,
+      );
+      setRows(response.rows);
+      if (response.project) setProject(response.project);
+      toast.success(`${task.id} progress updated`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update progress");
+    }
   };
 
   return (
@@ -83,6 +120,12 @@ function ProjectDetail() {
           </button>
         ))}
       </div>
+
+      {isLoading && (
+        <div className="mb-4 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+          Loading latest project subtasks...
+        </div>
+      )}
 
       {tab === "Overview" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -154,6 +197,13 @@ function ProjectDetail() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
+              {subs.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-muted-foreground">
+                    No subtasks are available for this project yet.
+                  </td>
+                </tr>
+              )}
               {subs.map((pt) => (
                 <tr key={pt.id} className="hover:bg-muted/40">
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{pt.id}</td>
@@ -173,6 +223,16 @@ function ProjectDetail() {
                       </div>
                       <span className="text-xs w-9 text-right">{pt.completion}%</span>
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {canEditProjectTask(user, pt) && (
+                      <button
+                        onClick={() => updateProgress(pt)}
+                        className="rounded border border-border px-2 py-1 text-xs hover:bg-muted"
+                      >
+                        +25%
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -1,16 +1,40 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById } from "@/lib/mock-data";
+import { userById, type Project, type ProjectTask } from "@/lib/mock-data";
+import { backendClient } from "@/lib/backend-client";
 import { projectService } from "@/lib/services";
 import { Plus, FolderKanban, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/projects")({
   component: ProjectsPage,
 });
 
 function ProjectsPage() {
-  const projects = projectService.list();
+  const [projects, setProjects] = useState<Project[]>(() => projectService.list());
+  const [projectTasks, setProjectTasks] = useState<ProjectTask[]>(() => projectService.listTasks());
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const [projectsResponse, tasksResponse] = await Promise.all([
+          backendClient.listProjects(),
+          backendClient.listProjectTasks(),
+        ]);
+        setProjects(projectsResponse.rows);
+        setProjectTasks(tasksResponse.rows);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to load projects");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
@@ -24,9 +48,15 @@ function ProjectsPage() {
         }
       />
 
+      {isLoading && (
+        <div className="mb-4 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+          Loading latest projects...
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         {projects.map((p) => {
-          const subs = projectService.listTasks(p.id);
+          const subs = projectTasks.filter((task) => task.projectId === p.id);
           return (
             <Link
               key={p.id}

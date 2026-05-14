@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { userById, type IncidentStatus, type TaskStatus } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth";
 import { canEditTask, canWorkIncidents } from "@/lib/rbac";
-import { incidentService, taskService } from "@/lib/services";
+import { backendClient } from "@/lib/backend-client";
 import { recordAuditLog } from "@/lib/audit-log";
 import { toast } from "sonner";
 import {
@@ -94,11 +94,13 @@ export function DetailDrawer({
   onOpenChange,
   kind,
   item,
+  onUpdated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   kind: DetailKind;
   item: DetailItem | null;
+  onUpdated?: () => void;
 }) {
   const { user } = useAuth();
   const [, force] = useState(0);
@@ -265,18 +267,27 @@ export function DetailDrawer({
     }
   };
 
-  const saveUpdate = () => {
+  const saveUpdate = async () => {
     if (!user || !canEdit) return;
     if (statusDraft !== item.status) {
-      activity.unshift({
-        id: `a${Date.now()}`,
-        at: "just now",
-        by: me,
-        text: `Status changed from ${item.status} to ${statusDraft}.`,
-      });
-      if (kind === "task") taskService.updateStatus(item.id, statusDraft as TaskStatus, user.id);
-      else incidentService.updateStatus(item.id, statusDraft as IncidentStatus, user.id);
-      item.status = statusDraft;
+      try {
+        if (kind === "task") {
+          await backendClient.updateTaskStatus(user.id, item.id, statusDraft as TaskStatus);
+        } else {
+          await backendClient.updateIncidentStatus(user.id, item.id, statusDraft as IncidentStatus);
+        }
+        activity.unshift({
+          id: `a${Date.now()}`,
+          at: "just now",
+          by: me,
+          text: `Status changed from ${item.status} to ${statusDraft}.`,
+        });
+        item.status = statusDraft;
+        onUpdated?.();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to update status");
+        return;
+      }
     }
     if (updateNote.trim()) {
       comments.unshift({
@@ -361,18 +372,29 @@ export function DetailDrawer({
                   icon={UserPlus}
                   label="Assign to me"
                   onClick={() => {
-                    if (kind === "task" && user) taskService.assignTo(item.id, user.id, user.id);
-                    else if (kind === "incident" && user)
-                      incidentService.assignTo(item.id, user.id, user.id);
-                    item.assignee = user?.id ?? null;
-                    activity.unshift({
-                      id: `a${Date.now()}`,
-                      at: "just now",
-                      by: me,
-                      text: `Self-assigned ${item.id}.`,
-                    });
-                    force((n) => n + 1);
-                    toast.success("Assigned to you");
+                    if (!user) return;
+                    const assign = async () => {
+                      try {
+                        if (kind === "task") {
+                          await backendClient.assignTask(user.id, item.id, user.id);
+                        } else {
+                          await backendClient.assignIncident(user.id, item.id, user.id);
+                        }
+                        item.assignee = user.id;
+                        onUpdated?.();
+                        activity.unshift({
+                          id: `a${Date.now()}`,
+                          at: "just now",
+                          by: me,
+                          text: `Self-assigned ${item.id}.`,
+                        });
+                        force((n) => n + 1);
+                        toast.success("Assigned to you");
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Unable to assign");
+                      }
+                    };
+                    assign();
                   }}
                 />
               )}

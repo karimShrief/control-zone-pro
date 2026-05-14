@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { type User, type Role } from "./mock-data";
-import { authenticateMockUser, getMockUserById } from "./services";
-import { recordAuditLog } from "./audit-log";
+import { backendClient } from "./backend-client";
 
 interface AuthState {
   user: User | null;
-  login: (username: string, password: string) => User | null;
+  isLoading: boolean;
+  login: (username: string, password: string) => Promise<User | null>;
   logout: () => void;
 }
 
@@ -15,25 +15,35 @@ const STORAGE_KEY = "ops-command-user";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const id = localStorage.getItem(STORAGE_KEY);
-    if (id) {
-      const u = getMockUserById(id);
-      if (u) setUser(u);
+    if (typeof window === "undefined") {
+      setIsLoading(false);
+      return;
     }
+    const id = localStorage.getItem(STORAGE_KEY);
+    if (!id) {
+      setIsLoading(false);
+      return;
+    }
+
+    backendClient
+      .getUser(id)
+      .then(({ user: restored }) => setUser(restored))
+      .catch(() => localStorage.removeItem(STORAGE_KEY))
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const login = (username: string, password: string) => {
-    const u = authenticateMockUser(username, password);
-    if (u) {
+  const login = async (username: string, password: string) => {
+    try {
+      const { user: u } = await backendClient.login(username, password);
       setUser(u);
       if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, u.id);
-      recordAuditLog({ actorId: u.id, action: "auth.login", entityType: "auth", entityId: u.id });
       return u;
+    } catch {
+      return null;
     }
-    return null;
   };
 
   const logout = () => {
@@ -41,16 +51,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
     if (previousUser) {
-      recordAuditLog({
-        actorId: previousUser.id,
-        action: "auth.logout",
-        entityType: "auth",
-        entityId: previousUser.id,
-      });
+      backendClient.logout(previousUser.id).catch(() => undefined);
     }
   };
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

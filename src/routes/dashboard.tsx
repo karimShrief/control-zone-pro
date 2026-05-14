@@ -2,16 +2,14 @@ import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { PageHeader, KpiCard } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
+import { productivity, monthlyTrend, userById } from "@/lib/mock-data";
 import {
-  tasks,
-  incidents,
-  projects,
-  shifts,
-  handoverPoints,
-  productivity,
-  monthlyTrend,
-  userById,
-} from "@/lib/mock-data";
+  handoverService,
+  incidentService,
+  projectService,
+  shiftService,
+  taskService,
+} from "@/lib/services";
 import {
   AlertTriangle,
   ListChecks,
@@ -51,6 +49,11 @@ function Dashboard() {
 }
 
 function ManagerDashboard() {
+  const tasks = taskService.list();
+  const incidents = incidentService.list();
+  const projects = projectService.list();
+  const shifts = shiftService.listSchedule();
+  const handoverPoints = handoverService.list();
   const openTasks = tasks.filter((t) => !["Completed", "Cancelled"].includes(t.status)).length;
   const slaBreaches =
     tasks.filter((t) => t.sla === "Breached").length +
@@ -61,7 +64,9 @@ function ManagerDashboard() {
   const today = new Date().toISOString().slice(0, 10);
   const todaysShifts = shifts.filter((s) => s.date === today);
   const handoverComplete = Math.round(
-    (handoverPoints.filter((h) => h.acknowledged).length / handoverPoints.length) * 100,
+    handoverPoints.length
+      ? (handoverPoints.filter((h) => h.acknowledged).length / handoverPoints.length) * 100
+      : 0,
   );
 
   const workloadByEng = productivity.map((p) => ({
@@ -72,7 +77,7 @@ function ManagerDashboard() {
   const incidentByCat = ["Network", "Cooling", "Power", "Storage", "Security", "Application"].map(
     (c) => ({
       name: c,
-      value: incidents.filter((i) => i.category === c).length || 1,
+      value: incidents.filter((i) => i.category === c).length,
     }),
   );
   const colors = [
@@ -293,6 +298,7 @@ function ManagerDashboard() {
 }
 
 function ExecutiveDashboard() {
+  const projects = projectService.list();
   const slaCompliance = Math.round(monthlyTrend[monthlyTrend.length - 1].sla);
   const projectAvg = Math.round(projects.reduce((a, p) => a + p.completion, 0) / projects.length);
   const risks = projects.filter((p) => p.risk === "High").length;

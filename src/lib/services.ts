@@ -11,9 +11,13 @@ import {
   type HandoverPoint,
   type Incident,
   type IncidentStatus,
+  type Priority,
   type ProjectTask,
+  type Role,
   type ShiftRequest,
+  type Task,
   type TaskStatus,
+  type User,
 } from "./mock-data";
 import { recordAuditLog } from "./audit-log";
 
@@ -30,8 +34,105 @@ export function getMockUserById(userId: string | null | undefined) {
   return users.find((user) => user.id === userId) ?? null;
 }
 
+export const userService = {
+  list: () => [...users],
+  create: (
+    actorId: string,
+    input: Pick<User, "name" | "username" | "role"> & { team?: User["team"] },
+  ) => {
+    const username = input.username.trim().toLowerCase();
+    if (!username || users.some((user) => user.username.toLowerCase() === username)) return null;
+    const nextNumber =
+      Math.max(0, ...users.map((user) => Number(user.id.replace("u", ""))).filter(Boolean)) + 1;
+    const user: User = {
+      id: `u${nextNumber}`,
+      username,
+      password: "demo",
+      name: input.name.trim(),
+      role: input.role,
+      team: input.team,
+    };
+    users.push(user);
+    recordAuditLog({
+      actorId,
+      action: "user.create",
+      entityType: "user",
+      entityId: user.id,
+      after: { username: user.username, role: user.role, team: user.team },
+    });
+    return user;
+  },
+  update: (
+    userId: string,
+    actorId: string,
+    input: Partial<Pick<User, "name" | "username">> & { role?: Role; team?: User["team"] },
+  ) => {
+    const user = users.find((item) => item.id === userId);
+    if (!user) return null;
+
+    const nextUsername = input.username?.trim().toLowerCase();
+    if (
+      nextUsername &&
+      users.some((item) => item.id !== userId && item.username.toLowerCase() === nextUsername)
+    ) {
+      return null;
+    }
+
+    const before = {
+      name: user.name,
+      username: user.username,
+      role: user.role,
+      team: user.team,
+    };
+    if (input.name?.trim()) user.name = input.name.trim();
+    if (nextUsername) user.username = nextUsername;
+    if (input.role) user.role = input.role;
+    if ("team" in input) user.team = input.team;
+
+    recordAuditLog({
+      actorId,
+      action: "user.update",
+      entityType: "user",
+      entityId: user.id,
+      before,
+      after: { name: user.name, username: user.username, role: user.role, team: user.team },
+    });
+    return user;
+  },
+};
+
 export const taskService = {
   list: () => [...tasks],
+  get: (taskId: string) => tasks.find((task) => task.id === taskId) ?? null,
+  create: (actorId: string): Task => {
+    const nextNumber =
+      Math.max(0, ...tasks.map((task) => Number(task.id.replace("T-", ""))).filter(Boolean)) + 1;
+    const task: Task = {
+      id: `T-${nextNumber}`,
+      title: "New operations task",
+      description: "Mock task created from the existing Add Task action.",
+      type: "General Task",
+      category: "Operations",
+      priority: "Medium",
+      impact: "Medium",
+      status: "New",
+      assignee: null,
+      dueDate: new Date().toISOString().slice(0, 10),
+      sla: "On Track",
+      comments: 0,
+      evidence: 0,
+      audit: "Pending",
+    };
+    tasks.unshift(task);
+    recordAuditLog({
+      actorId,
+      action: "task.create",
+      entityType: "task",
+      entityId: task.id,
+      after: task,
+    });
+    return task;
+  },
   updateStatus: (taskId: string, status: TaskStatus, actorId: string) => {
     const task = tasks.find((item) => item.id === taskId);
     if (!task) return null;
@@ -226,12 +327,42 @@ export const shiftService = {
 
 export const shiftRequestService = {
   list: () => [...shiftRequests],
+  create: (
+    actorId: string,
+    input: Pick<
+      ShiftRequest,
+      "type" | "requestedDate" | "currentShift" | "requestedShift" | "reason"
+    >,
+  ) => {
+    const nextNumber =
+      Math.max(0, ...shiftRequests.map((request) => Number(request.id.replace("SR-", "")))) + 1;
+    const request: ShiftRequest = {
+      id: `SR-${nextNumber}`,
+      type: input.type,
+      requester: actorId,
+      requestedDate: input.requestedDate,
+      currentShift: input.currentShift,
+      requestedShift: input.requestedShift,
+      reason: input.reason,
+      status: "Pending",
+      managerApproval: "-",
+    };
+    shiftRequests.unshift(request);
+    recordAuditLog({
+      actorId,
+      action: "shift-request.create",
+      entityType: "shift-request",
+      entityId: request.id,
+      after: request,
+    });
+    return request;
+  },
   updateStatus: (requestId: string, status: ShiftRequest["status"], actorId: string) => {
     const request = shiftRequests.find((item) => item.id === requestId);
     if (!request) return null;
     const before = { status: request.status, managerApproval: request.managerApproval };
     request.status = status;
-    request.managerApproval = status === "Pending" ? "—" : `${status} by manager`;
+    request.managerApproval = status === "Pending" ? "-" : `${status} by manager`;
     recordAuditLog({
       actorId,
       action: "shift-request.status.update",
@@ -246,18 +377,33 @@ export const shiftRequestService = {
 
 export const handoverService = {
   list: () => [...handoverPoints],
-  create: (actorId: string, shift: HandoverPoint["shift"]) => {
+  create: (
+    actorId: string,
+    input: {
+      shift: HandoverPoint["shift"];
+      title?: string;
+      category?: HandoverPoint["category"];
+      priority?: Priority;
+      status?: HandoverPoint["status"];
+      relatedRef?: string;
+      nextAction?: string;
+      notes?: string;
+    },
+  ) => {
+    const nextNumber =
+      Math.max(0, ...handoverPoints.map((point) => Number(point.id.replace("HP-", "")))) + 1;
     const point: HandoverPoint = {
-      id: `HP-${handoverPoints.length + 1}`,
+      id: `HP-${nextNumber}`,
       date: new Date().toISOString().slice(0, 10),
-      shift,
-      title: "New handover point",
-      category: "General",
-      priority: "Medium",
-      status: "Open",
+      shift: input.shift,
+      title: input.title?.trim() || "New handover point",
+      category: input.category ?? "General",
+      priority: input.priority ?? "Medium",
+      status: input.status ?? "Open",
       owner: actorId,
-      nextAction: "Review during next shift",
-      notes: "Mock handover point created from the existing submit action.",
+      relatedRef: input.relatedRef?.trim() || undefined,
+      nextAction: input.nextAction?.trim() || "Review during next shift",
+      notes: input.notes?.trim() || "Mock handover point created from the handover form.",
       evidence: 0,
       acknowledged: false,
       audit: "Pending",
@@ -285,6 +431,21 @@ export const handoverService = {
       entityId: handoverId,
       before,
       after: { audit: handover.audit, acknowledged: handover.acknowledged },
+    });
+    return handover;
+  },
+  acknowledge: (handoverId: string, actorId: string) => {
+    const handover = handoverPoints.find((item) => item.id === handoverId);
+    if (!handover) return null;
+    const before = { acknowledged: handover.acknowledged };
+    handover.acknowledged = true;
+    recordAuditLog({
+      actorId,
+      action: "handover.acknowledge",
+      entityType: "handover",
+      entityId: handoverId,
+      before,
+      after: { acknowledged: handover.acknowledged },
     });
     return handover;
   },

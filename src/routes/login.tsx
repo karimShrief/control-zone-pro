@@ -14,12 +14,16 @@ function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("demo");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (user) return <Navigate to={landingFor(user.role)} />;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const u = login(username, password);
+    setError("");
+    setIsSubmitting(true);
+    const u = await login(username, password);
+    setIsSubmitting(false);
     if (u) navigate({ to: landingFor(u.role) });
     else setError("Invalid credentials. Try one of the demo accounts below.");
   };
@@ -129,9 +133,10 @@ function LoginPage() {
             {error && <div className="text-sm text-critical">{error}</div>}
             <button
               type="submit"
+              disabled={isSubmitting}
               className="w-full rounded-md bg-primary text-primary-foreground py-2.5 text-sm font-medium hover:bg-primary/90 transition flex items-center justify-center gap-2"
             >
-              <Lock className="h-4 w-4" /> Sign in securely
+              <Lock className="h-4 w-4" /> {isSubmitting ? "Signing in..." : "Sign in securely"}
             </button>
           </form>
 

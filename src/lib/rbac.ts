@@ -41,7 +41,9 @@ export function canEditTask(
   if (!user || !task) return false;
   if (["manager", "admin"].includes(user.role)) return true;
   if (user.role !== "engineer") return false;
-  return task.assignee === user.id || task.assignee === "shared";
+  return (
+    task.assignee === user.id || task.assignee === "shared" || task.type === "Daily DC Operation"
+  );
 }
 
 export function canManageProjects(user: User | null) {

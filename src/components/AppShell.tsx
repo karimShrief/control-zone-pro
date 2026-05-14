@@ -96,9 +96,17 @@ const NAV: NavItem[] = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading workspace...
+      </div>
+    );
+  }
 
   if (!user) {
     if (path !== "/login") return <Navigate to="/login" />;
@@ -218,7 +226,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem>
                   <UserCircle2 className="h-4 w-4 mr-2" /> My profile
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate({ to: "/login" })}>
+                <DropdownMenuItem
+                  onClick={() => {
+                    logout();
+                    navigate({ to: "/login" });
+                  }}
+                >
                   <LogIn className="h-4 w-4 mr-2" /> Switch user
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
