@@ -4,7 +4,7 @@
 
 Ops Command Platform is a TanStack Start + React operations platform for Data Center and NOC teams. The application was generated with Lovable and uses the existing Lovable UI, role-based navigation, and operational pages as the product shell.
 
-The current implementation is backend-ready but still mock-backed. Domain mutations are centralized through a lightweight service layer so future backend adapters can replace mock arrays without redesigning the UI.
+The current implementation is backend-ready and uses neutral starter data. Domain mutations are centralized through a lightweight service layer so future backend adapters can replace in-memory arrays without redesigning the UI.
 
 ## Technology stack
 
@@ -33,15 +33,15 @@ src/
   lib/
     audit-log.ts          In-memory audit log helpers
     auth.tsx              Auth context, login/logout, role landing helper
-    mock-data.ts          Mock users and operational domain data
+    data.ts               Neutral starter data and domain type definitions
     rbac.ts               Route/action role checks
-    services.ts           Mock service layer for domain operations
+    services.ts           In-memory service layer, ready to swap for API calls
     shift-clock.tsx       Shift clock state and persistence
     utils.ts              Shared utility helpers
   routes/
     __root.tsx            Root route and providers
     index.tsx             Entry redirect route
-    login.tsx             Mock credential login page
+    login.tsx             Bootstrap credential login page
     dashboard.tsx         Manager/executive dashboard views
     my-work.tsx           Engineer work landing page
     tasks.tsx             Task table and task actions
@@ -109,16 +109,17 @@ Current note: `bun test` reports no matching tests until test files are added.
 
 ## Authentication model
 
-Authentication is mock username/password authentication. The app stores the logged-in user id in browser local storage and restores the user from mock data on reload.
+Authentication currently uses starter username/password records from `src/lib/data.ts`. The app stores the logged-in user id in browser local storage and restores the user from the configured data source on reload.
 
-| Role | Username | Password | Landing page |
-| --- | --- | --- | --- |
-| Engineer | `ahmed` | `demo` | `/my-work` |
-| Manager | `manager` | `demo` | `/dashboard` |
-| Executive | `exec` | `demo` | `/dashboard` |
-| Admin | `admin` | `demo` | `/admin` |
+| Role       | Username    | Password    | Landing page |
+| ---------- | ----------- | ----------- | ------------ |
+| Engineer   | `engineer`  | `change-me` | `/my-work`   |
+| Shift Lead | `shiftlead` | `change-me` | `/my-work`   |
+| Manager    | `manager`   | `change-me` | `/dashboard` |
+| Executive  | `exec`      | `change-me` | `/dashboard` |
+| Admin      | `admin`     | `change-me` | `/admin`     |
 
-Additional engineer accounts: `khalid`, `saeed`, `omar`, `hassan`, and `yousef`, all using password `demo`.
+Replace these bootstrap users with your real team accounts before production use. See `TEAM_DATA.md`.
 
 ## Role-based access control
 
@@ -126,47 +127,47 @@ RBAC is centralized in `src/lib/rbac.ts`.
 
 ### Route-level access
 
-| Route prefix | Allowed roles |
-| --- | --- |
-| `/dashboard` | Manager, Executive, Admin |
-| `/my-work` | Engineer |
-| `/tasks` | Engineer, Manager, Admin |
-| `/incidents` | Engineer, Manager, Executive, Admin |
-| `/projects` | Engineer, Manager, Executive, Admin |
-| `/shifts` | Engineer, Manager, Admin |
-| `/shift-requests` | Engineer, Manager, Admin |
-| `/handover` | Engineer, Manager, Admin |
-| `/sop` | Engineer, Manager, Executive, Admin |
-| `/productivity` | Manager, Executive, Admin |
-| `/reports` | Manager, Executive, Admin |
-| `/admin` | Admin |
+| Route prefix      | Allowed roles                       |
+| ----------------- | ----------------------------------- |
+| `/dashboard`      | Manager, Executive, Admin           |
+| `/my-work`        | Engineer                            |
+| `/tasks`          | Engineer, Manager, Admin            |
+| `/incidents`      | Engineer, Manager, Executive, Admin |
+| `/projects`       | Engineer, Manager, Executive, Admin |
+| `/shifts`         | Engineer, Manager, Admin            |
+| `/shift-requests` | Engineer, Manager, Admin            |
+| `/handover`       | Engineer, Manager, Admin            |
+| `/sop`            | Engineer, Manager, Executive, Admin |
+| `/productivity`   | Manager, Executive, Admin           |
+| `/reports`        | Manager, Executive, Admin           |
+| `/admin`          | Admin                               |
 
 `AppShell` enforces route access for direct navigation. If no user is logged in, users are redirected to `/login`. If a logged-in user accesses a disallowed route, they are redirected to their role landing page.
 
 ### Action-level access
 
-| Action | Allowed roles / rules |
-| --- | --- |
-| Task manage/read actions | Engineer, Manager, Admin |
-| Task edit | Manager/Admin, or Engineer if assigned to self or shared |
-| Incident create/work actions | Engineer, Manager, Admin |
-| Shift request submit | Engineer |
-| Shift request approve/reject | Manager, Admin |
-| Handover submit | Engineer |
-| Handover audit/review | Manager, Admin |
-| SOP create/manage | Manager, Admin |
-| SOP read/download | All roles with SOP route access |
-| Project manage/add task | Manager, Admin |
-| Project task progress edit | Manager/Admin, or assigned Engineer |
+| Action                       | Allowed roles / rules                                    |
+| ---------------------------- | -------------------------------------------------------- |
+| Task manage/read actions     | Engineer, Manager, Admin                                 |
+| Task edit                    | Manager/Admin, or Engineer if assigned to self or shared |
+| Incident create/work actions | Engineer, Manager, Admin                                 |
+| Shift request submit         | Engineer                                                 |
+| Shift request approve/reject | Manager, Admin                                           |
+| Handover submit              | Engineer                                                 |
+| Handover audit/review        | Manager, Admin                                           |
+| SOP create/manage            | Manager, Admin                                           |
+| SOP read/download            | All roles with SOP route access                          |
+| Project manage/add task      | Manager, Admin                                           |
+| Project task progress edit   | Manager/Admin, or assigned Engineer                      |
 
 ## Service layer
 
-Domain logic lives in `src/lib/services.ts`. The service layer is intentionally lightweight and currently mutates mock data arrays in memory.
+Domain logic lives in `src/lib/services.ts`. The service layer is intentionally lightweight and currently mutates starter data arrays in memory.
 
 ### Auth helpers
 
-- `authenticateMockUser(username, password)`
-- `getMockUserById(userId)`
+- `authenticateUser(username, password)`
+- `getUserById(userId)`
 
 ### Task service
 
@@ -247,7 +248,7 @@ Examples of audited actions:
 
 Route: `/login`
 
-Users authenticate with mock username/password credentials. Successful login redirects to the role landing page.
+Users authenticate with starter username/password credentials. Successful login redirects to the role landing page.
 
 ### Engineer My Work
 
@@ -271,7 +272,7 @@ Supports task filtering, table review, task details, status updates, evidence/co
 
 Route: `/incidents`
 
-Supports incident filtering by severity/source/category, mock incident creation, assignment, acceptance, resolution, escalation, comments, evidence, and report attachments. Executives can access incidents in read-only mode.
+Supports incident filtering by severity/source/category, incident creation, assignment, acceptance, resolution, escalation, comments, evidence, and report attachments. Executives can access incidents in read-only mode.
 
 ### Projects
 
@@ -304,7 +305,7 @@ Engineers can submit handover points. Managers/admins can review and mark handov
 
 Route: `/sop`
 
-Shows SOP cards with search, category filters, document type filters, and mock download action. Managers/admins see the New Document action. Executives have read-only access.
+Shows SOP cards with search, category filters, document type filters, and a download action ready for file-service integration. Managers/admins see the New Document action. Executives have read-only access.
 
 ### Productivity
 
@@ -316,7 +317,7 @@ Shows team throughput and SLA charts.
 
 Route: `/reports`
 
-Shows report cards and mock preview/export actions.
+Shows report cards and preview/export actions ready for reporting-service integration.
 
 ### Admin
 
@@ -342,10 +343,10 @@ Use `TESTING.md` for detailed step-by-step scenarios. Minimum smoke test:
 ## Known limitations
 
 - No real backend is connected yet.
-- Mock array data resets on app reload or server restart.
+- In-memory starter data resets on app reload or server restart.
 - Shift clock state uses browser local storage.
 - Audit logs are in-memory and reset on reload/restart.
-- File attachments and SOP downloads are mock UI interactions.
+- File attachments and SOP downloads are UI interactions ready for storage integration.
 - There are no formal automated test files yet.
 - Service methods are frontend-only and should not be treated as security boundaries once a real backend is added.
 
@@ -354,12 +355,12 @@ Use `TESTING.md` for detailed step-by-step scenarios. Minimum smoke test:
 To connect a real backend while preserving the UI:
 
 1. Keep the service method names stable.
-2. Replace mock-array implementations with backend calls.
+2. Replace in-memory array implementations with backend calls.
 3. Move RBAC enforcement into backend authorization policies as well as UI checks.
 4. Persist audit log entries on the backend.
 5. Add loading/error states around async service calls.
 6. Add validation schemas for service inputs.
-7. Keep mock mode available for demos and local development.
+7. Keep a local starter-data mode available for development.
 
 ## Maintenance guidance
 

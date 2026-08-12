@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader, KpiCard } from "@/components/AppShell";
-import { productivity, monthlyTrend } from "@/lib/mock-data";
+import { productivity, monthlyTrend } from "@/lib/data";
 import {
   BarChart,
   Bar,
@@ -21,7 +21,9 @@ export const Route = createFileRoute("/productivity")({
 
 function ProductivityPage() {
   const totalCompleted = productivity.reduce((a, p) => a + p.completed, 0);
-  const avgSla = Math.round(productivity.reduce((a, p) => a + p.sla, 0) / productivity.length);
+  const avgSla = productivity.length
+    ? Math.round(productivity.reduce((a, p) => a + p.sla, 0) / productivity.length)
+    : 0;
   const totalOpen = productivity.reduce((a, p) => a + p.open, 0);
 
   return (

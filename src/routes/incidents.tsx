@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById, type Incident, type Severity } from "@/lib/mock-data";
+import { userById, type Incident, type Severity } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canCreateIncidents, canWorkIncidents } from "@/lib/rbac";
 import { incidentService } from "@/lib/services";
@@ -59,7 +59,7 @@ function IncidentsPage() {
     if (!user || !canCreate) return;
     const incident = incidentService.create(user.id, {
       title: "Manual incident",
-      description: "Mock incident created from the existing Create Incident action",
+      description: "Incident created from the Create Incident action",
       source: "Manual",
       category: "Unknown",
     });

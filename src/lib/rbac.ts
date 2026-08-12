@@ -1,14 +1,14 @@
-import type { Role, ProjectTask, User } from "./mock-data";
+import type { Role, ProjectTask, User } from "./data";
 
 const ROUTE_ROLES: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/dashboard", roles: ["manager", "executive", "admin"] },
-  { prefix: "/my-work", roles: ["engineer"] },
-  { prefix: "/tasks", roles: ["engineer", "manager", "admin"] },
+  { prefix: "/my-work", roles: ["engineer", "shift-lead"] },
+  { prefix: "/tasks", roles: ["engineer", "shift-lead", "manager", "admin"] },
   { prefix: "/incidents", roles: ["engineer", "manager", "executive", "admin"] },
   { prefix: "/projects", roles: ["engineer", "manager", "executive", "admin"] },
-  { prefix: "/shifts", roles: ["engineer", "manager", "admin"] },
-  { prefix: "/shift-requests", roles: ["engineer", "manager", "admin"] },
-  { prefix: "/handover", roles: ["engineer", "manager", "admin"] },
+  { prefix: "/shifts", roles: ["engineer", "shift-lead", "manager", "executive", "admin"] },
+  { prefix: "/shift-requests", roles: ["engineer", "shift-lead", "manager", "admin"] },
+  { prefix: "/handover", roles: ["engineer", "shift-lead", "manager", "admin"] },
   { prefix: "/sop", roles: ["engineer", "manager", "executive", "admin"] },
   { prefix: "/productivity", roles: ["manager", "executive", "admin"] },
   { prefix: "/reports", roles: ["manager", "executive", "admin"] },
@@ -40,7 +40,7 @@ export function canEditTask(
 ) {
   if (!user || !task) return false;
   if (["manager", "admin"].includes(user.role)) return true;
-  if (user.role !== "engineer") return false;
+  if (!["engineer", "shift-lead"].includes(user.role)) return false;
   return task.assignee === user.id || task.assignee === "shared";
 }
 
@@ -51,7 +51,7 @@ export function canManageProjects(user: User | null) {
 export function canEditProjectTask(user: User | null, task: Pick<ProjectTask, "assignee"> | null) {
   if (!user || !task) return false;
   if (["manager", "admin"].includes(user.role)) return true;
-  return user.role === "engineer" && task.assignee === user.id;
+  return ["engineer", "shift-lead"].includes(user.role) && task.assignee === user.id;
 }
 
 export function canSubmitHandover(user: User | null) {
@@ -71,7 +71,11 @@ export function canManageShiftRequests(user: User | null) {
 }
 
 export function canSubmitShiftRequests(user: User | null) {
-  return !!user && user.role === "engineer";
+  return !!user && ["engineer", "shift-lead"].includes(user.role);
+}
+
+export function canManageRoster(user: User | null) {
+  return !!user && ["manager", "admin"].includes(user.role);
 }
 
 export function canAuditHandover(user: User | null) {

@@ -1,63 +1,28 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { users, userById } from "./mock-data";
+import { users, userById, type ShiftType } from "./data";
 import { recordAuditLog } from "./audit-log";
 
 export interface ShiftEntry {
   userId: string;
   date: string; // YYYY-MM-DD
-  shift: "Morning" | "Night";
+  shift: ShiftType;
   signInAt: string | null; // ISO
   signOutAt: string | null; // ISO
   note?: string;
 }
 
-const STORAGE_KEY = "ops-shift-clock";
+const STORAGE_KEY = "ops-shift-clock-v2";
 
-// Seed mock data: a few engineers already signed in today
 function seed(): ShiftEntry[] {
-  const today = new Date().toISOString().slice(0, 10);
-  const at = (h: number, m = 0) => {
-    const d = new Date();
-    d.setHours(h, m, 0, 0);
-    return d.toISOString();
-  };
-  return [
-    {
-      userId: "u1",
-      date: today,
-      shift: "Morning",
-      signInAt: at(6, 4),
-      signOutAt: null,
-      note: "Handover received from u2",
-    },
-    { userId: "u3", date: today, shift: "Morning", signInAt: at(5, 58), signOutAt: null },
-    {
-      userId: "u5",
-      date: today,
-      shift: "Morning",
-      signInAt: at(6, 12),
-      signOutAt: null,
-      note: "Late — traffic",
-    },
-    {
-      userId: "u2",
-      date: today,
-      shift: "Night",
-      signInAt: at(17, 55),
-      signOutAt: at(6, 2),
-      note: "All quiet · escalated INC-2041 to vendor",
-    },
-    { userId: "u4", date: today, shift: "Night", signInAt: at(18, 1), signOutAt: at(6, 5) },
-    { userId: "u6", date: today, shift: "Night", signInAt: at(18, 10), signOutAt: at(5, 58) },
-  ];
+  return [];
 }
 
 interface Ctx {
   entries: ShiftEntry[];
   todayFor: (userId: string) => ShiftEntry | undefined;
-  signIn: (userId: string, shift: "Morning" | "Night", note?: string) => void;
+  signIn: (userId: string, shift: ShiftType, note?: string) => void;
   signOut: (userId: string, note?: string) => void;
-  rosterFor: (date: string, shift: "Morning" | "Night") => ShiftEntry[];
+  rosterFor: (date: string, shift: ShiftType) => ShiftEntry[];
 }
 
 const ShiftClockContext = createContext<Ctx | undefined>(undefined);
@@ -89,13 +54,13 @@ export function ShiftClockProvider({ children }: { children: ReactNode }) {
   const today = () => new Date().toISOString().slice(0, 10);
 
   const todayFor: Ctx["todayFor"] = (userId) =>
-    entries.find((e) => e.userId === userId && e.date === today());
+    entries.find((entry) => entry.userId === userId && entry.date === today());
 
   const signIn: Ctx["signIn"] = (userId, shift, note) => {
     const d = today();
-    const existing = entries.find((e) => e.userId === userId && e.date === d);
+    const existing = entries.find((entry) => entry.userId === userId && entry.date === d);
     if (existing && existing.signInAt && !existing.signOutAt) return;
-    const next = entries.filter((e) => !(e.userId === userId && e.date === d));
+    const next = entries.filter((entry) => !(entry.userId === userId && entry.date === d));
     const entry = {
       userId,
       date: d,
@@ -118,12 +83,12 @@ export function ShiftClockProvider({ children }: { children: ReactNode }) {
   const signOut: Ctx["signOut"] = (userId, note) => {
     const d = today();
     let updated: ShiftEntry | undefined;
-    const next = entries.map((e) => {
-      if (e.userId === userId && e.date === d && e.signInAt && !e.signOutAt) {
-        updated = { ...e, signOutAt: new Date().toISOString(), note: note ?? e.note };
+    const next = entries.map((entry) => {
+      if (entry.userId === userId && entry.date === d && entry.signInAt && !entry.signOutAt) {
+        updated = { ...entry, signOutAt: new Date().toISOString(), note: note ?? entry.note };
         return updated;
       }
-      return e;
+      return entry;
     });
     persist(next);
     if (updated) {
@@ -138,7 +103,7 @@ export function ShiftClockProvider({ children }: { children: ReactNode }) {
   };
 
   const rosterFor: Ctx["rosterFor"] = (date, shift) =>
-    entries.filter((e) => e.date === date && e.shift === shift);
+    entries.filter((entry) => entry.date === date && entry.shift === shift);
 
   return (
     <ShiftClockContext.Provider value={{ entries, todayFor, signIn, signOut, rosterFor }}>
@@ -154,7 +119,7 @@ export function useShiftClock() {
 }
 
 export function fmtTime(iso: string | null) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -167,12 +132,12 @@ export function durationMinutes(a: string | null, b: string | null) {
 }
 
 export function fmtDuration(mins: number) {
-  if (mins <= 0) return "—";
-  const h = Math.floor(mins / 60),
-    m = mins % 60;
+  if (mins <= 0) return "-";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
   return `${h}h ${m.toString().padStart(2, "0")}m`;
 }
 
 export function userLabel(id: string) {
-  return userById(id) || users.find((u) => u.id === id)?.name || id;
+  return userById(id) || users.find((user) => user.id === id)?.name || id;
 }

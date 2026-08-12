@@ -9,30 +9,30 @@ Ops Command Platform is a role-based operations command surface for Data Center 
 - Preserve the existing Lovable UI and navigation.
 - Build backend-ready seams incrementally; do not rewrite the app from scratch.
 - Keep role behavior consistent across navigation, pages, and actions.
-- Replace direct mock mutations with service-layer calls over time.
+- Replace direct in-memory mutations with service-layer calls over time.
 - Prefer small, testable increments with clear acceptance criteria.
-- Keep mock data useful until a real backend is connected.
+- Keep starter data useful until a real backend is connected.
 
 ## Current product roles
 
-| Role | Primary goal | Current landing page | Key access |
-| --- | --- | --- | --- |
-| Engineer | Execute assigned/shared operational work | `/my-work` | My Work, Tasks, Incidents, Projects, Shifts, Shift Requests, Handover, SOP Library |
-| Manager | Coordinate team work and review operations | `/dashboard` | Dashboard, Tasks, Incidents, Projects, Shifts, Shift Requests, Handover review, SOP Library, Productivity, Reports |
-| Executive | Review operational posture and KPIs | `/dashboard` | Executive dashboard, Incidents, Projects, SOP Library, Productivity, Reports |
-| Admin | Manage users, roles, and system setup | `/admin` | Admin plus operational/management pages |
+| Role      | Primary goal                               | Current landing page | Key access                                                                                                         |
+| --------- | ------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Engineer  | Execute assigned/shared operational work   | `/my-work`           | My Work, Tasks, Incidents, Projects, Shifts, Shift Requests, Handover, SOP Library                                 |
+| Manager   | Coordinate team work and review operations | `/dashboard`         | Dashboard, Tasks, Incidents, Projects, Shifts, Shift Requests, Handover review, SOP Library, Productivity, Reports |
+| Executive | Review operational posture and KPIs        | `/dashboard`         | Executive dashboard, Incidents, Projects, SOP Library, Productivity, Reports                                       |
+| Admin     | Manage users, roles, and system setup      | `/admin`             | Admin plus operational/management pages                                                                            |
 
 ## Release roadmap
 
-### Release 0: Stabilize mock backend-ready foundation
+### Release 0: Stabilize backend-ready foundation
 
-**Goal:** Make the current Lovable app reliable for demo/testing with service-layer actions and permission checks.
+**Goal:** Make the current Lovable app reliable for local testing with service-layer actions and permission checks.
 
 **Scope:**
 
 - Confirm all existing pages load for allowed roles.
 - Confirm disallowed direct routes redirect safely.
-- Confirm mock services cover tasks, incidents, projects, shifts, shift requests, handover, SOP, auth, and audit logs.
+- Confirm services cover tasks, incidents, projects, shifts, shift requests, handover, SOP, auth, and audit logs.
 - Document testing and operating instructions.
 
 **Done when:**
@@ -44,7 +44,7 @@ Ops Command Platform is a role-based operations command surface for Data Center 
 
 ### Release 1: Real backend adapter preparation
 
-**Goal:** Prepare service APIs to swap mock arrays for real backend calls without redesigning UI.
+**Goal:** Prepare service APIs to swap in-memory arrays for real backend calls without redesigning UI.
 
 **Scope:**
 
@@ -57,7 +57,7 @@ Ops Command Platform is a role-based operations command surface for Data Center 
 **Done when:**
 
 - Service methods have typed inputs and outputs.
-- UI routes depend on services rather than direct mock arrays for mutations.
+- UI routes depend on services rather than direct data-array mutations.
 - RBAC helper tests cover all roles and route prefixes.
 
 ### Release 2: Backend integration
@@ -73,7 +73,7 @@ Ops Command Platform is a role-based operations command surface for Data Center 
 
 **Done when:**
 
-- Mock services can be toggled or replaced by backend adapters.
+- In-memory services can be toggled or replaced by backend adapters.
 - Core role flows work against backend data.
 - Audit logs persist outside browser memory.
 
@@ -168,31 +168,31 @@ Ops Command Platform is a role-based operations command surface for Data Center 
 
 **Stories:**
 
-1. As a developer, I can switch one domain from mock data to a backend adapter.
+1. As a developer, I can switch one domain from starter data to a backend adapter.
 2. As a tester, I can verify the UI still behaves the same with backend data.
 
 **Acceptance criteria:**
 
 - One domain, preferably tasks or incidents, uses a backend adapter behind the same service interface.
 - Environment variables are documented.
-- Mock mode remains available for demos.
+- Local starter-data mode remains available for development.
 
 ## Prioritized backlog
 
-| Priority | Epic | Backlog item | Notes |
-| --- | --- | --- | --- |
-| P0 | Documentation | Keep TESTING.md and DOCUMENTATION.md up to date | Required for review and handoff |
-| P0 | Quality | Add RBAC unit tests | Prevent permission regressions |
-| P0 | Quality | Add service smoke tests | Cover core create/update flows |
-| P1 | Tasks | Replace temporary assignment shortcut with assignee selector | Preserve current table/action style |
-| P1 | Incidents | Add create incident dialog using existing visual language | Source/category/status should be explicit |
-| P1 | Handover | Add submit handover dialog | Include date, shift, category, priority, owner, next action |
-| P1 | Projects | Add project task form | Include title, assignee, progress, due date |
-| P2 | Audit | Add admin/report view for audit logs | Read-only first |
-| P2 | SOP | Add SOP preview mock panel | Do not require real document storage yet |
-| P2 | Backend | Define backend adapter interface | Keep mock service fallback |
-| P3 | Reporting | Export reports from service data | Can remain mock-generated initially |
-| P3 | Notifications | Add SLA/assignment notifications | Requires backend/event strategy |
+| Priority | Epic          | Backlog item                                                 | Notes                                                       |
+| -------- | ------------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
+| P0       | Documentation | Keep TESTING.md and DOCUMENTATION.md up to date              | Required for review and handoff                             |
+| P0       | Quality       | Add RBAC unit tests                                          | Prevent permission regressions                              |
+| P0       | Quality       | Add service smoke tests                                      | Cover core create/update flows                              |
+| P1       | Tasks         | Replace temporary assignment shortcut with assignee selector | Preserve current table/action style                         |
+| P1       | Incidents     | Add create incident dialog using existing visual language    | Source/category/status should be explicit                   |
+| P1       | Handover      | Add submit handover dialog                                   | Include date, shift, category, priority, owner, next action |
+| P1       | Projects      | Add project task form                                        | Include title, assignee, progress, due date                 |
+| P2       | Audit         | Add admin/report view for audit logs                         | Read-only first                                             |
+| P2       | SOP           | Add SOP preview panel                                        | Do not require real document storage yet                    |
+| P2       | Backend       | Define backend adapter interface                             | Keep starter service fallback                               |
+| P3       | Reporting     | Export reports from service data                             | Can remain generated from starter data initially            |
+| P3       | Notifications | Add SLA/assignment notifications                             | Requires backend/event strategy                             |
 
 ## Definition of ready
 
@@ -218,14 +218,14 @@ A story is done when:
 
 ## Risks and mitigations
 
-| Risk | Impact | Mitigation |
-| --- | --- | --- |
-| Large UI rewrite breaks Lovable design | High | Keep changes incremental and page-local |
-| RBAC hidden only in UI but not services | High | Add service-level actor checks or backend enforcement in later release |
-| Mock data diverges from backend schema | Medium | Introduce typed DTOs before backend integration |
-| Audit logs are in-memory only | Medium | Persist audit logs in backend adapter release |
-| No automated tests | Medium | Prioritize RBAC/service tests in Sprint 2 |
-| Corporate network blocks preview URLs | Medium | Document cloud IDE port preview and local alternatives |
+| Risk                                      | Impact | Mitigation                                                             |
+| ----------------------------------------- | ------ | ---------------------------------------------------------------------- |
+| Large UI rewrite breaks Lovable design    | High   | Keep changes incremental and page-local                                |
+| RBAC hidden only in UI but not services   | High   | Add service-level actor checks or backend enforcement in later release |
+| Starter data diverges from backend schema | Medium | Introduce typed DTOs before backend integration                        |
+| Audit logs are in-memory only             | Medium | Persist audit logs in backend adapter release                          |
+| No automated tests                        | Medium | Prioritize RBAC/service tests in Sprint 2                              |
+| Corporate network blocks preview URLs     | Medium | Document cloud IDE port preview and local alternatives                 |
 
 ## Recommended review checklist
 
@@ -235,7 +235,7 @@ A story is done when:
 - Engineer mutation actions are limited to assigned/shared work.
 - Manager/admin controls are available on management workflows.
 - Executive pages are read-only.
-- Incident create/assign/accept/resolve flows work in mock mode.
-- Project task add/update progress flows work in mock mode.
-- Handover submit/review flows work in mock mode.
-- SOP search/filter/download flows work in mock mode.
+- Incident create/assign/accept/resolve flows work in local starter-data mode.
+- Project task add/update progress flows work in local starter-data mode.
+- Handover submit/review flows work in local starter-data mode.
+- SOP search/filter/download flows work in local starter-data mode.

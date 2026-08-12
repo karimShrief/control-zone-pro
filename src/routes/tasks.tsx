@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById, type Task, type TaskType, type TaskStatus } from "@/lib/mock-data";
+import { users as appUsers, userById, type Task, type TaskType, type TaskStatus } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canEditTask, canManageTasks } from "@/lib/rbac";
 import { taskService } from "@/lib/services";
@@ -53,9 +53,16 @@ function TasksPage() {
 
   const assignTask = (task: Task) => {
     if (!user || !["manager", "admin"].includes(user.role)) return;
-    taskService.assignTo(task.id, "u1", user.id);
+    const availableEngineer = appUsers.find(
+      (target) => target.role === "engineer" && target.status !== "Inactive",
+    );
+    if (!availableEngineer) {
+      toast.error("Add an active engineer before assigning tasks");
+      return;
+    }
+    taskService.assignTo(task.id, availableEngineer.id, user.id);
     refresh();
-    toast.success(`${task.id} assigned to Ahmed`);
+    toast.success(`${task.id} assigned to ${availableEngineer.name}`);
   };
 
   const filtered = rows.filter((t) => {
@@ -223,7 +230,7 @@ function TasksPage() {
                         )}
                         {["manager", "admin"].includes(user?.role ?? "") && (
                           <RowBtn
-                            title="Assign to Ahmed"
+                            title="Assign to first active engineer"
                             icon={UserPlus}
                             onClick={() => assignTask(t)}
                           />

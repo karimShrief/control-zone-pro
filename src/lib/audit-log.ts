@@ -7,7 +7,13 @@ export type AuditEntityType =
   | "shift"
   | "shift-request"
   | "handover"
-  | "sop";
+  | "sop"
+  | "user"
+  | "role"
+  | "team"
+  | "category"
+  | "status"
+  | "system";
 
 export interface AuditLogEntry {
   id: string;

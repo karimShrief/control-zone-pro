@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate, Navigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useAuth, landingFor } from "@/lib/auth";
 import { Activity, Shield, Lock } from "lucide-react";
-import { users } from "@/lib/mock-data";
+import { users } from "@/lib/data";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -12,7 +12,7 @@ function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("demo");
+  const [password, setPassword] = useState("change-me");
   const [error, setError] = useState("");
 
   if (user) return <Navigate to={landingFor(user.role)} />;
@@ -21,11 +21,12 @@ function LoginPage() {
     e.preventDefault();
     const u = login(username, password);
     if (u) navigate({ to: landingFor(u.role) });
-    else setError("Invalid credentials. Try one of the demo accounts below.");
+    else setError("Invalid credentials. Try one of the bootstrap accounts below.");
   };
 
-  const demo = [
-    { label: "Engineer", username: "ahmed" },
+  const bootstrapAccounts = [
+    { label: "Engineer", username: "engineer" },
+    { label: "Shift Lead", username: "shiftlead" },
     { label: "Manager", username: "manager" },
     { label: "Executive", username: "exec" },
     { label: "Admin", username: "admin" },
@@ -110,7 +111,7 @@ function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="e.g. ahmed"
+                placeholder="e.g. engineer"
                 autoFocus
               />
             </div>
@@ -123,7 +124,7 @@ function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="demo"
+                placeholder="change-me"
               />
             </div>
             {error && <div className="text-sm text-critical">{error}</div>}
@@ -137,16 +138,16 @@ function LoginPage() {
 
           <div className="mt-8">
             <div className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
-              Demo accounts (password: demo)
+              Bootstrap accounts (password: change-me)
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {demo.map((d) => (
+              {bootstrapAccounts.map((d) => (
                 <button
                   key={d.username}
                   type="button"
                   onClick={() => {
                     setUsername(d.username);
-                    setPassword("demo");
+                    setPassword("change-me");
                   }}
                   className="rounded-md border border-border bg-card px-3 py-2 text-left text-xs hover:border-primary transition"
                 >
@@ -156,7 +157,7 @@ function LoginPage() {
               ))}
             </div>
             <div className="text-[11px] text-muted-foreground mt-3">
-              All {users.length} demo users use password <span className="font-mono">demo</span>.
+              Replace these {users.length} starter users in the data layer before production use.
             </div>
           </div>
         </div>

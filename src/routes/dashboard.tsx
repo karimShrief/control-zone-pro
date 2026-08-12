@@ -11,7 +11,7 @@ import {
   productivity,
   monthlyTrend,
   userById,
-} from "@/lib/mock-data";
+} from "@/lib/data";
 import {
   AlertTriangle,
   ListChecks,
@@ -60,9 +60,14 @@ function ManagerDashboard() {
   const blocked = tasks.filter((t) => t.status === "Blocked").length;
   const today = new Date().toISOString().slice(0, 10);
   const todaysShifts = shifts.filter((s) => s.date === today);
-  const handoverComplete = Math.round(
-    (handoverPoints.filter((h) => h.acknowledged).length / handoverPoints.length) * 100,
-  );
+  const handoverComplete = handoverPoints.length
+    ? Math.round(
+        (handoverPoints.filter((h) => h.acknowledged).length / handoverPoints.length) * 100,
+      )
+    : 0;
+  const avgProductivitySla = productivity.length
+    ? Math.round(productivity.reduce((a, p) => a + p.sla, 0) / productivity.length)
+    : 0;
 
   const workloadByEng = productivity.map((p) => ({
     name: p.name,
@@ -268,9 +273,7 @@ function ManagerDashboard() {
           <div className="mt-4 pt-4 border-t border-border">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-muted-foreground">Productivity (avg SLA)</span>
-              <span className="font-semibold">
-                {Math.round(productivity.reduce((a, p) => a + p.sla, 0) / productivity.length)}%
-              </span>
+              <span className="font-semibold">{avgProductivitySla}%</span>
             </div>
             <ResponsiveContainer width="100%" height={80}>
               <LineChart data={monthlyTrend}>
@@ -293,8 +296,10 @@ function ManagerDashboard() {
 }
 
 function ExecutiveDashboard() {
-  const slaCompliance = Math.round(monthlyTrend[monthlyTrend.length - 1].sla);
-  const projectAvg = Math.round(projects.reduce((a, p) => a + p.completion, 0) / projects.length);
+  const slaCompliance = Math.round(monthlyTrend.at(-1)?.sla ?? 0);
+  const projectAvg = projects.length
+    ? Math.round(projects.reduce((a, p) => a + p.completion, 0) / projects.length)
+    : 0;
   const risks = projects.filter((p) => p.risk === "High").length;
 
   return (

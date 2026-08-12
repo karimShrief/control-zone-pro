@@ -2,7 +2,7 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById, type ProjectTask } from "@/lib/mock-data";
+import { userById, type ProjectTask } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canEditProjectTask, canManageProjects } from "@/lib/rbac";
 import { projectService } from "@/lib/services";
@@ -236,7 +236,7 @@ function ProjectDetail() {
 
       {(tab === "Risks" || tab === "Comments" || tab === "Evidence") && (
         <div className="rounded-lg border border-border bg-card p-12 text-center text-sm text-muted-foreground">
-          {tab} view — mock data placeholder.
+          {tab} view is ready for your project data.
         </div>
       )}
     </div>

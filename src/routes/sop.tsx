@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById } from "@/lib/mock-data";
+import { userById } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canManageSops } from "@/lib/rbac";
 import { sopService } from "@/lib/services";

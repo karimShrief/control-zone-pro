@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { type User, type Role } from "./mock-data";
-import { authenticateMockUser, getMockUserById } from "./services";
+import { type User, type Role } from "./data";
+import { authenticateUser, getUserById } from "./services";
 import { recordAuditLog } from "./audit-log";
 
 interface AuthState {
@@ -20,13 +20,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     const id = localStorage.getItem(STORAGE_KEY);
     if (id) {
-      const u = getMockUserById(id);
+      const u = getUserById(id);
       if (u) setUser(u);
     }
   }, []);
 
   const login = (username: string, password: string) => {
-    const u = authenticateMockUser(username, password);
+    const u = authenticateUser(username, password);
     if (u) {
       setUser(u);
       if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, u.id);
@@ -62,6 +62,8 @@ export function useAuth() {
 export function landingFor(role: Role): string {
   switch (role) {
     case "engineer":
+      return "/my-work";
+    case "shift-lead":
       return "/my-work";
     case "manager":
       return "/dashboard";

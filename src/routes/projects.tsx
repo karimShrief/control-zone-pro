@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById } from "@/lib/mock-data";
+import { userById } from "@/lib/data";
 import { projectService } from "@/lib/services";
 import { Plus, FolderKanban, AlertCircle } from "lucide-react";
 

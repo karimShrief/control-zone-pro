@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useShiftClock, fmtTime, fmtDuration, durationMinutes } from "@/lib/shift-clock";
-import { Sun, Moon, LogIn, LogOut, Clock, CheckCircle2 } from "lucide-react";
+import { Sun, Moon, LogIn, LogOut, Clock, CheckCircle2, Sunset } from "lucide-react";
 import { shiftService } from "@/lib/services";
+import type { ShiftType } from "@/lib/data";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -16,9 +17,10 @@ import {
 export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
   const { user } = useAuth();
   const { todayFor, signIn, signOut } = useShiftClock();
+  const shiftTypes = shiftService.listShiftTypes().filter((item) => item.enabled);
   const [openIn, setOpenIn] = useState(false);
   const [openOut, setOpenOut] = useState(false);
-  const [shift, setShift] = useState<"Morning" | "Night">("Morning");
+  const [shift, setShift] = useState<ShiftType>(shiftTypes[0]?.name ?? "Morning");
   const [note, setNote] = useState("");
 
   if (!user || user.role !== "engineer") return null;
@@ -26,7 +28,7 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
   const today = new Date().toISOString().slice(0, 10);
   const scheduled = shiftService
     .listSchedule()
-    .find((s) => s.date === today && s.engineers.includes(user.id));
+    .find((item) => item.date === today && item.engineers.includes(user.id));
   const entry = todayFor(user.id);
   const onShift = !!entry?.signInAt && !entry?.signOutAt;
   const completed = !!entry?.signInAt && !!entry?.signOutAt;
@@ -38,9 +40,10 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
     setOpenIn(false);
     setNote("");
   };
+
   const doOut = () => {
     signOut(user.id, note.trim() || undefined);
-    toast.success("Signed out · shift complete");
+    toast.success("Signed out - shift complete");
     setOpenOut(false);
     setNote("");
   };
@@ -55,13 +58,9 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
             <Clock className="h-3.5 w-3.5" /> Shift Clock
           </div>
           <div className="mt-1 flex items-center gap-2">
-            {scheduled?.type === "Night" ? (
-              <Moon className="h-4 w-4 text-info" />
-            ) : (
-              <Sun className="h-4 w-4 text-warning-foreground" />
-            )}
+            <ShiftIcon shift={scheduled?.type} />
             <span className="font-semibold">
-              {scheduled?.type ?? "Off-shift"} · {today}
+              {scheduled?.type ?? "Off-shift"} - {today}
             </span>
           </div>
         </div>
@@ -96,7 +95,7 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
         {!onShift && !completed && (
           <button
             onClick={() => {
-              setShift(scheduled?.type ?? "Morning");
+              setShift(scheduled?.type ?? shiftTypes[0]?.name ?? "Morning");
               setOpenIn(true);
             }}
             className="flex-1 inline-flex items-center justify-center gap-2 rounded-md bg-success/15 text-success border border-success/30 px-3 py-2 text-sm font-medium hover:bg-success/20"
@@ -119,7 +118,6 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
         )}
       </div>
 
-      {/* Sign-in dialog */}
       <Dialog open={openIn} onOpenChange={setOpenIn}>
         <DialogContent>
           <DialogHeader>
@@ -133,15 +131,18 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
               <label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Shift
               </label>
-              <div className="mt-1.5 grid grid-cols-2 gap-2">
-                {(["Morning", "Night"] as const).map((s) => (
+              <div className="mt-1.5 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {shiftTypes.map((item) => (
                   <button
-                    key={s}
-                    onClick={() => setShift(s)}
-                    className={`rounded-md border px-3 py-2 text-sm inline-flex items-center justify-center gap-2 ${shift === s ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted"}`}
+                    key={item.id}
+                    onClick={() => setShift(item.name)}
+                    className={`rounded-md border px-3 py-2 text-sm inline-flex items-center justify-center gap-2 ${
+                      shift === item.name
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:bg-muted"
+                    }`}
                   >
-                    {s === "Morning" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}{" "}
-                    {s}
+                    <ShiftIcon shift={item.name} /> {item.name}
                   </button>
                 ))}
               </div>
@@ -152,9 +153,9 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
               </label>
               <textarea
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={(event) => setNote(event.target.value)}
                 rows={3}
-                placeholder="Handover acknowledged, status of open items…"
+                placeholder="Handover acknowledged, status of open items..."
                 className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm resize-none"
               />
             </div>
@@ -183,7 +184,6 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
         </DialogContent>
       </Dialog>
 
-      {/* Sign-out dialog */}
       <Dialog open={openOut} onOpenChange={setOpenOut}>
         <DialogContent>
           <DialogHeader>
@@ -207,9 +207,9 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
               </label>
               <textarea
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
+                onChange={(event) => setNote(event.target.value)}
                 rows={4}
-                placeholder="Open incidents, pending tasks, anything next shift should know…"
+                placeholder="Open incidents, pending tasks, anything next shift should know..."
                 className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm resize-none"
               />
             </div>
@@ -234,10 +234,18 @@ export function ShiftClockCard({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function ShiftIcon({ shift }: { shift?: ShiftType }) {
+  if (shift === "Night") return <Moon className="h-4 w-4 text-info" />;
+  if (shift === "Evening") return <Sunset className="h-4 w-4 text-warning-foreground" />;
+  return <Sun className="h-4 w-4 text-warning-foreground" />;
+}
+
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div
-      className={`rounded-md border px-2 py-1.5 ${highlight ? "border-success/40 bg-success/10" : "border-border bg-muted/30"}`}
+      className={`rounded-md border px-2 py-1.5 ${
+        highlight ? "border-success/40 bg-success/10" : "border-border bg-muted/30"
+      }`}
     >
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={`text-sm font-semibold tabular-nums ${highlight ? "text-success" : ""}`}>

@@ -1,4 +1,5 @@
 import { Link, Navigate, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { landingFor, useAuth } from "@/lib/auth";
 import { canAccessPath } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
@@ -19,8 +20,12 @@ import {
   Activity,
   Search,
   Bell,
+  ChevronLeft,
   ChevronDown,
   LogIn,
+  Monitor,
+  Moon,
+  Sun,
   UserCircle2,
 } from "lucide-react";
 import {
@@ -31,11 +36,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Role } from "@/lib/mock-data";
+import { systemConfigService } from "@/lib/services";
+import {
+  roleConfigs,
+  systemSettings,
+  type AdminModule,
+  type Role,
+  type SystemSettings,
+} from "@/lib/data";
 
 interface NavItem {
   to: string;
   label: string;
+  module: AdminModule;
   icon: React.ComponentType<{ className?: string }>;
   roles: Role[];
 }
@@ -43,62 +56,129 @@ interface NavItem {
 const NAV: NavItem[] = [
   {
     to: "/dashboard",
-    label: "Dashboard",
+    label: "Command Dashboard",
+    module: "Dashboard",
     icon: LayoutDashboard,
     roles: ["manager", "executive", "admin"],
   },
-  { to: "/my-work", label: "My Work", icon: Briefcase, roles: ["engineer"] },
-  { to: "/tasks", label: "Tasks", icon: ListChecks, roles: ["engineer", "manager", "admin"] },
+  {
+    to: "/my-work",
+    label: "My Work Queue",
+    module: "My Work",
+    icon: Briefcase,
+    roles: ["engineer", "shift-lead"],
+  },
+  {
+    to: "/tasks",
+    label: "Task Control",
+    module: "Tasks",
+    icon: ListChecks,
+    roles: ["engineer", "shift-lead", "manager", "admin"],
+  },
   {
     to: "/incidents",
-    label: "Incidents",
+    label: "Incident Control",
+    module: "Incidents",
     icon: AlertTriangle,
     roles: ["engineer", "manager", "executive", "admin"],
   },
   {
     to: "/projects",
     label: "Projects",
+    module: "Projects",
     icon: FolderKanban,
     roles: ["engineer", "manager", "executive", "admin"],
   },
   {
     to: "/shifts",
-    label: "Shift Schedule",
+    label: "Shift Roster",
+    module: "Shift Roster",
     icon: CalendarDays,
-    roles: ["engineer", "manager", "admin"],
+    roles: ["engineer", "shift-lead", "manager", "executive", "admin"],
   },
   {
     to: "/shift-requests",
     label: "Shift Requests",
+    module: "Shift Requests",
     icon: Repeat,
-    roles: ["engineer", "manager", "admin"],
+    roles: ["engineer", "shift-lead", "manager", "admin"],
   },
   {
     to: "/handover",
-    label: "Handover",
+    label: "Shift Handover",
+    module: "Handover",
     icon: ClipboardList,
-    roles: ["engineer", "manager", "admin"],
+    roles: ["engineer", "shift-lead", "manager", "admin"],
   },
   {
     to: "/sop",
     label: "SOP Library",
+    module: "SOP Library",
     icon: BookOpen,
     roles: ["engineer", "manager", "executive", "admin"],
   },
   {
     to: "/productivity",
-    label: "Team Productivity",
+    label: "Productivity",
+    module: "Productivity",
     icon: BarChart3,
     roles: ["manager", "executive", "admin"],
   },
-  { to: "/reports", label: "Reports", icon: FileText, roles: ["manager", "executive", "admin"] },
-  { to: "/admin", label: "Admin", icon: ShieldCheck, roles: ["admin"] },
+  {
+    to: "/reports",
+    label: "Reports",
+    module: "Reports",
+    icon: FileText,
+    roles: ["manager", "executive", "admin"],
+  },
+  { to: "/admin", label: "Admin Config", module: "Admin", icon: ShieldCheck, roles: ["admin"] },
 ];
+
+const THEME_EVENT = "ops-system-settings-changed";
+const THEME_OPTIONS: SystemSettings["themePreference"][] = ["System", "Light", "Dark"];
+
+function isDarkPreference(theme: SystemSettings["themePreference"]) {
+  if (theme === "Dark") return true;
+  if (theme === "Light") return false;
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function applyThemePreference(theme: SystemSettings["themePreference"]) {
+  if (typeof document === "undefined") return;
+  const isDark = isDarkPreference(theme);
+  document.documentElement.classList.toggle("dark", isDark);
+  document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+}
+
+function nextThemePreference(theme: SystemSettings["themePreference"]) {
+  const currentIndex = THEME_OPTIONS.indexOf(theme);
+  return THEME_OPTIONS[(currentIndex + 1) % THEME_OPTIONS.length];
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const [themePreference, setThemePreference] = useState<SystemSettings["themePreference"]>(
+    systemSettings.themePreference,
+  );
+
+  useEffect(() => {
+    applyThemePreference(themePreference);
+    if (themePreference !== "System" || typeof window === "undefined") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncSystemTheme = () => applyThemePreference("System");
+    media.addEventListener("change", syncSystemTheme);
+    return () => media.removeEventListener("change", syncSystemTheme);
+  }, [themePreference]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncSettingsTheme = () => setThemePreference(systemSettings.themePreference);
+    window.addEventListener(THEME_EVENT, syncSettingsTheme);
+    return () => window.removeEventListener(THEME_EVENT, syncSettingsTheme);
+  }, []);
 
   if (!user) {
     if (path !== "/login") return <Navigate to="/login" />;
@@ -107,7 +187,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!canAccessPath(user, path)) return <Navigate to={landingFor(user.role)} />;
 
-  const items = NAV.filter((n) => n.roles.includes(user.role));
+  const roleConfig = roleConfigs.find((role) => role.id === user.role);
+  const items = NAV.filter(
+    (n) =>
+      n.roles.includes(user.role) &&
+      systemSettings.enabledModules.includes(n.module) &&
+      (roleConfig?.modules.includes(n.module) ?? true),
+  );
+  const ThemeIcon = themePreference === "Dark" ? Moon : themePreference === "Light" ? Sun : Monitor;
+
+  const cycleThemePreference = () => {
+    const next = nextThemePreference(themePreference);
+    systemConfigService.update(user.id, { themePreference: next });
+    setThemePreference(next);
+  };
 
   return (
     <div className="flex min-h-screen w-full bg-background">
@@ -118,9 +211,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold tracking-tight">Ops Command</div>
+            <div className="text-sm font-semibold tracking-tight">{systemSettings.appName}</div>
             <div className="text-[11px] text-sidebar-foreground/60 uppercase tracking-wider">
-              DC · NOC Platform
+              DC / NOC Platform
             </div>
           </div>
         </div>
@@ -180,7 +273,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-3 flex-1 max-w-md">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
-              placeholder="Search tasks, incidents, projects, SOPs…"
+              placeholder="Search tasks, incidents, projects, SOPs..."
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
@@ -192,6 +285,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <button className="relative rounded-md p-2 hover:bg-muted text-muted-foreground">
               <Bell className="h-4 w-4" />
               <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-critical" />
+            </button>
+            <button
+              onClick={cycleThemePreference}
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-2 text-xs text-foreground hover:bg-muted"
+              title={`Theme: ${themePreference}. Click to change.`}
+            >
+              <ThemeIcon className="h-4 w-4 text-muted-foreground" />
+              <span className="hidden lg:inline">{themePreference}</span>
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1.5 text-sm hover:bg-muted">
@@ -245,16 +346,43 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  showBack = true,
 }: {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  showBack?: boolean;
 }) {
+  const navigate = useNavigate();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const { user } = useAuth();
+  const fallbackPath = user ? landingFor(user.role) : "/login";
+  const canGoBack = showBack && path !== fallbackPath && path !== "/login";
+
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    navigate({ to: fallbackPath });
+  };
+
   return (
     <div className="flex items-start justify-between gap-4 mb-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
-        {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+      <div className="flex min-w-0 items-start gap-3">
+        {canGoBack ? (
+          <button
+            onClick={goBack}
+            className="mt-0.5 inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Go back"
+          >
+            <ChevronLeft className="h-4 w-4" /> Back
+          </button>
+        ) : null}
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
+          {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+        </div>
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>

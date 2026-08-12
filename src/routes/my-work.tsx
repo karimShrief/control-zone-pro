@@ -3,7 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { PageHeader, KpiCard } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ShiftClockCard } from "@/components/ShiftClockCard";
-import { tasks, incidents, projectTasks, handoverPoints, shifts, userById } from "@/lib/mock-data";
+import { tasks, incidents, projectTasks, handoverPoints, shifts, userById } from "@/lib/data";
 import {
   Briefcase,
   AlertTriangle,

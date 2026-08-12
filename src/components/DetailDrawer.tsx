@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById, type IncidentStatus, type TaskStatus } from "@/lib/mock-data";
+import { userById, type IncidentStatus, type TaskStatus } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canEditTask, canWorkIncidents } from "@/lib/rbac";
 import { incidentService, taskService } from "@/lib/services";
@@ -122,13 +122,13 @@ export function DetailDrawer({
   const comments = ensure(seedComments, item.id, () => [
     {
       id: "c1",
-      author: "Mohammed Al Suwaidi",
+      author: "Operations Manager",
       at: "2 hours ago",
       text: "Please prioritise this and update by EOD.",
     },
     {
       id: "c2",
-      author: "Ahmed Al Marzouqi",
+      author: "Assigned Engineer",
       at: "1 hour ago",
       text: "Investigating. Will share findings shortly.",
     },
@@ -138,7 +138,7 @@ export function DetailDrawer({
       id: "e1",
       name: "before.png",
       size: "412 KB",
-      by: "Ahmed",
+      by: "Engineer",
       at: "Today 09:14",
       kind: "image" as const,
     },
@@ -146,7 +146,7 @@ export function DetailDrawer({
       id: "e2",
       name: "switch-cpu.log",
       size: "28 KB",
-      by: "Khalid",
+      by: "Engineer",
       at: "Today 08:02",
       kind: "log" as const,
     },
@@ -158,7 +158,7 @@ export function DetailDrawer({
             id: "r1",
             name: `${item.id}-incident-report-v1.pdf`,
             size: "186 KB",
-            by: "Khalid Al Hammadi",
+            by: "Operations Team",
             at: "Today 10:30",
             type: "Incident Report" as const,
           },
@@ -559,7 +559,7 @@ export function DetailDrawer({
                   <IconBtn
                     icon={Download}
                     title="Download"
-                    onClick={() => toast("Mock download")}
+                    onClick={() => toast("Download action ready for your file service")}
                   />
                   {canEdit && (
                     <IconBtn icon={Trash2} title="Remove" onClick={() => removeEvidence(f.id)} />
@@ -637,7 +637,7 @@ export function DetailDrawer({
                     <IconBtn
                       icon={Download}
                       title="Download"
-                      onClick={() => toast("Mock download")}
+                      onClick={() => toast("Download action ready for your file service")}
                     />
                     {canEdit && (
                       <IconBtn icon={Trash2} title="Remove" onClick={() => removeReport(r.id)} />

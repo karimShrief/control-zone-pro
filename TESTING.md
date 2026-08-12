@@ -65,28 +65,29 @@ Then open:
 http://localhost:4173/
 ```
 
-## 3. Mock login credentials
+## 3. Bootstrap login credentials
 
-All mock accounts use the same password:
+Starter accounts use the same password:
 
 ```text
-password: demo
+password: change-me
 ```
 
-| Role | Username | Password | Expected landing page |
-| --- | --- | --- | --- |
-| Engineer | `ahmed` | `demo` | `/my-work` |
-| Manager | `manager` | `demo` | `/dashboard` |
-| Executive | `exec` | `demo` | `/dashboard` |
-| Admin | `admin` | `demo` | `/admin` |
+| Role       | Username    | Password    | Expected landing page |
+| ---------- | ----------- | ----------- | --------------------- |
+| Engineer   | `engineer`  | `change-me` | `/my-work`            |
+| Shift Lead | `shiftlead` | `change-me` | `/my-work`            |
+| Manager    | `manager`   | `change-me` | `/dashboard`          |
+| Executive  | `exec`      | `change-me` | `/dashboard`          |
+| Admin      | `admin`     | `change-me` | `/admin`              |
 
-Additional engineer accounts are available for assignment checks: `khalid`, `saeed`, `omar`, `hassan`, and `yousef`; each uses password `demo`.
+Operational record arrays now start empty. Add your own team data in `src/lib/data.ts` or use Admin actions to create starter records during testing.
 
 ## 4. Role-based test scenarios
 
 ### Engineer
 
-1. Log in as `ahmed` / `demo`.
+1. Log in as `engineer` / `change-me`.
 2. Confirm redirect to `/my-work`.
 3. Open `/tasks`.
 4. Confirm engineer can update shared Daily DC Operations tasks.
@@ -97,7 +98,7 @@ Additional engineer accounts are available for assignment checks: `khalid`, `sae
 
 ### Manager
 
-1. Log in as `manager` / `demo`.
+1. Log in as `manager` / `change-me`.
 2. Confirm redirect to `/dashboard`.
 3. Open `/tasks` and verify manager assignment/reassignment actions are available.
 4. Open `/handover` and verify manager sees review/audit actions.
@@ -106,7 +107,7 @@ Additional engineer accounts are available for assignment checks: `khalid`, `sae
 
 ### Executive
 
-1. Log in as `exec` / `demo`.
+1. Log in as `exec` / `change-me`.
 2. Confirm redirect to `/dashboard`.
 3. Open `/incidents`, `/projects`, `/sop`, `/productivity`, and `/reports`.
 4. Verify pages load in a read-only mode with operational mutation controls hidden or disabled.
@@ -114,14 +115,14 @@ Additional engineer accounts are available for assignment checks: `khalid`, `sae
 
 ### Admin
 
-1. Log in as `admin` / `demo`.
+1. Log in as `admin` / `change-me`.
 2. Confirm redirect to `/admin`.
 3. Verify user management content is visible.
 4. Open `/tasks`, `/incidents`, `/projects`, `/shifts`, `/shift-requests`, `/handover`, `/sop`, `/productivity`, and `/reports` to verify admin access.
 
 ## 5. Incident test scenario
 
-1. Log in as `manager` / `demo`.
+1. Log in as `manager` / `change-me`.
 2. Open `/incidents`.
 3. Click Create Incident.
 4. Verify a new incident appears with:
@@ -130,7 +131,7 @@ Additional engineer accounts are available for assignment checks: `khalid`, `sae
    - Status: `Unassigned`
    - Assignee: `Unassigned`
 5. Use Assign to me or assignment action where available.
-6. Log out and log in as `ahmed` / `demo`.
+6. Log out and log in as `engineer` / `change-me`.
 7. Open `/incidents`.
 8. Accept an assigned incident.
 9. Resolve the incident.
@@ -138,7 +139,7 @@ Additional engineer accounts are available for assignment checks: `khalid`, `sae
 
 ## 6. Project task test scenario
 
-1. Log in as `manager` / `demo` or `admin` / `demo`.
+1. Log in as `manager` / `change-me` or `admin` / `change-me`.
 2. Open `/projects`.
 3. Open project `P-301`.
 4. Go to the Tasks tab.
@@ -152,11 +153,11 @@ Additional engineer accounts are available for assignment checks: `khalid`, `sae
 
 ## 7. Handover test scenario
 
-1. Log in as `ahmed` / `demo`.
+1. Log in as `engineer` / `change-me`.
 2. Open `/handover`.
 3. Click Submit Handover Point.
 4. Verify a new handover point appears with today's date and the selected/current shift context.
-5. Log out and log in as `manager` / `demo`.
+5. Log out and log in as `manager` / `change-me`.
 6. Open `/handover`.
 7. Verify Submit Handover is not the main action.
 8. Use Approve or Needs Update on a handover point.
@@ -170,14 +171,14 @@ Additional engineer accounts are available for assignment checks: `khalid`, `sae
 4. Use the search box to search for a known term, such as `network`, `cooling`, or `audit`.
 5. Use category and document type filters.
 6. Click Download on an SOP.
-7. Verify a success toast/feedback appears for the mock download action.
+7. Verify a success toast/feedback appears for the download action.
 8. Log in as `manager` or `admin` and verify New Document is visible.
 9. Log in as `exec` and verify SOP access is read-only.
 
 ## 9. Known limitations
 
-- Data is mock/in-memory unless specifically persisted to local storage.
+- Data is starter/in-memory unless specifically persisted to local storage.
 - Audit logs are in-memory only and reset when the app reloads or restarts.
-- File uploads and SOP downloads are mock actions; no real file storage is connected.
+- File uploads and SOP downloads are UI actions; no real file storage is connected yet.
 - There are no formal automated test files yet.
 - Some lint warnings may appear for existing Fast Refresh export patterns in UI/helper files.
