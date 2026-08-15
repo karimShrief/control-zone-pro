@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { userById, type Incident, type Severity } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canCreateIncidents, canWorkIncidents } from "@/lib/rbac";
-import { incidentService } from "@/lib/services";
+import { configurationService, incidentService } from "@/lib/services";
 import {
   Plus,
   AlertTriangle,
@@ -29,6 +29,7 @@ function IncidentsPage() {
   const [sevFilter, setSevFilter] = useState<Severity | "All">("All");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<Incident | null>(null);
+  const incidentRules = configurationService.listIncidentRules().filter((rule) => rule.active);
 
   const canCreate = canCreateIncidents(user);
   const canWork = canWorkIncidents(user);
@@ -57,11 +58,14 @@ function IncidentsPage() {
 
   const createIncident = () => {
     if (!user || !canCreate) return;
+    const rule = incidentRules[0];
     const incident = incidentService.create(user.id, {
-      title: "Manual incident",
-      description: "Incident created from the Create Incident action",
+      title: rule ? `${rule.category} incident review` : "Manual incident",
+      description: rule
+        ? "Incident created from a configured rule. Review the suggested severity, SLA and SOP."
+        : "Incident created from the Create Incident action",
       source: "Manual",
-      category: "Unknown",
+      category: rule?.category ?? "Unknown",
     });
     refresh();
     if (incident) toast.success(`${incident.id} created`);
@@ -94,7 +98,7 @@ function IncidentsPage() {
     <div className="p-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="Incidents"
-        subtitle="Active and recent operational incidents · sourced from monitoring, handovers, manual entry and ITSM"
+        subtitle="Track operational issues, ownership, severity, SLA risk and resolution readiness."
         actions={
           canCreate ? (
             <button
@@ -150,12 +154,38 @@ function IncidentsPage() {
               ))}
             </div>
           </div>
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="font-semibold text-sm mb-1">Rule Guidance</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Configured incident rules suggest severity, SLA and SOP guidance when incidents are
+              created.
+            </p>
+            <div className="space-y-2">
+              {incidentRules.slice(0, 4).map((rule) => (
+                <div key={rule.id} className="rounded-md border border-border bg-background p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{rule.category}</span>
+                    <StatusBadge status={rule.defaultSeverity} />
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {rule.slaMinutes} min SLA / {rule.recommendedSop || "No SOP linked"}
+                  </div>
+                </div>
+              ))}
+              {!incidentRules.length ? (
+                <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-sm text-muted-foreground">
+                  No incident rules configured yet.
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         <div className="col-span-12 lg:col-span-9 rounded-lg border border-border bg-card overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-3">
             <input
-              placeholder="Search incidents…"
+              placeholder="Search incidents..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -264,6 +294,16 @@ function IncidentsPage() {
                     </td>
                   </tr>
                 ))}
+                {!filtered.length ? (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center">
+                      <div className="text-sm font-medium">No incidents match your view</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Adjust severity/search filters or create an incident from a configured rule.
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

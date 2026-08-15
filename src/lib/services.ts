@@ -1,40 +1,65 @@
 import {
   categoryConfigs,
   coverageRules,
+  dashboardWidgetSettings,
   handoverPoints,
+  handoverTemplates,
+  importTemplateDefinitions,
+  incidentRules,
   incidents,
   projectTasks,
+  projectTemplates,
   projects,
   roleConfigs,
+  rosterRules,
   shiftRequests,
   shifts,
   shiftTypeConfigs,
+  slaEscalationPolicies,
+  sopSettings,
   sops,
   statusConfigs,
   systemSettings,
+  taskTemplates,
   tasks,
   teamConfigs,
   users,
   userById,
+  type DashboardWidgetSetting,
   type CategoryConfig,
   type CoverageStatus,
   type Role,
   type RoleConfig,
   type Shift,
   type HandoverPoint,
+  type HandoverTemplate,
+  type ImportJob,
+  type ImportJobRow,
+  type ImportJobStatus,
+  type ImportRowStatus,
+  type ImportTemplateDefinition,
+  type ImportType,
+  type IncidentCategory,
   type Incident,
+  type IncidentRule,
   type IncidentStatus,
   type ProjectTask,
+  type ProjectTemplate,
+  type RosterRule,
+  type SlaEscalationPolicy,
   type ShiftRequest,
   type ShiftType,
   type ShiftTypeConfig,
+  type SopSetting,
   type StatusConfig,
   type SystemSettings,
   type TeamConfig,
+  type TaskTemplate,
   type TaskStatus,
   type User,
 } from "./data";
-import { recordAuditLog } from "./audit-log";
+import { listAuditLogs, recordAuditLog, type AuditEntityType } from "./audit-log";
+import { mockRepositories } from "./repositories/mock-database";
 
 export function authenticateUser(username: string, password: string) {
   const user =
@@ -48,6 +73,10 @@ export function authenticateUser(username: string, password: string) {
 export function getUserById(userId: string | null | undefined) {
   return users.find((user) => user.id === userId) ?? null;
 }
+
+export const auditService = {
+  list: () => listAuditLogs(),
+};
 
 function nextNumericId(prefix: string, ids: string[]) {
   const next =
@@ -417,8 +446,666 @@ export const systemConfigService = {
   },
 };
 
+const repositories = mockRepositories;
+
+function timestamp() {
+  return new Date().toISOString();
+}
+
+function createImportId() {
+  return `IMP-${Date.now()}`;
+}
+
+function isKnownUserReference(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === "shared") return true;
+  return users.some(
+    (user) =>
+      user.id.toLowerCase() === normalized ||
+      user.username.toLowerCase() === normalized ||
+      user.name.toLowerCase() === normalized,
+  );
+}
+
+function isValidDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return false;
+  return !Number.isNaN(new Date(`${value.trim()}T00:00:00`).getTime());
+}
+
+function isValidDateTime(value: string) {
+  const normalized = value.trim().replace(" ", "T");
+  return !Number.isNaN(new Date(normalized).getTime());
+}
+
+function keyForImportRow(type: ImportType, row: Record<string, string>) {
+  const keys: Record<ImportType, string[]> = {
+    Users: ["username"],
+    Tasks: ["title", "dueDate"],
+    Incidents: ["title", "createdTime"],
+    Projects: ["projectName"],
+    "Project Tasks/Subtasks": ["projectId", "title"],
+    "Shift Roster": ["date", "shiftType"],
+    "Shift Requests": ["requester", "requestedDate", "currentShift", "requestedShift"],
+    "Handover Points": ["date", "shiftType", "title"],
+    "SOP Metadata": ["title", "version"],
+  };
+  return keys[type].map((key) => row[key]?.trim().toLowerCase() ?? "").join("|");
+}
+
+function createMockRows(template: ImportTemplateDefinition, jobId: string): ImportJobRow[] {
+  const base = Object.fromEntries(
+    template.fields.map((field) => [field.name, field.example]),
+  ) as Record<string, string>;
+  const requiredField = template.fields.find((field) => field.required)?.name;
+  const missing = { ...base };
+  if (requiredField) missing[requiredField] = "";
+  const warning = { ...base };
+  if ("assignedEngineer" in warning) warning.assignedEngineer = "Unknown Engineer";
+  if ("assignedEngineers" in warning) warning.assignedEngineers = "engineer; Unknown Engineer";
+  if ("assignee" in warning) warning.assignee = "Unknown Engineer";
+  if ("owner" in warning) warning.owner = "Unknown Owner";
+  if ("shiftLead" in warning) warning.shiftLead = "Unknown Lead";
+  if ("dueDate" in warning) warning.dueDate = "15/08/2026";
+  if ("targetDate" in warning) warning.targetDate = "15/09/2026";
+  if ("lastUpdated" in warning) warning.lastUpdated = "15/08/2026";
+  if ("createdTime" in warning) warning.createdTime = "15-08-2026";
+  if ("priority" in warning) warning.priority = "Urgent";
+  if ("shiftType" in warning) warning.shiftType = "Day";
+  if ("status" in warning) warning.status = "Started";
+
+  return [base, { ...base }, missing, warning].map((preview, index) => ({
+    id: `${jobId}-ROW-${index + 1}`,
+    jobId,
+    rowNumber: index + 1,
+    preview,
+    validationStatus: "Valid",
+    messages: [],
+  }));
+}
+
+function validateImportRows(type: ImportType, rows: ImportJobRow[]) {
+  const seen = new Set<string>();
+  return rows.map((row) => {
+    const messages: string[] = [];
+    const template = importTemplateDefinitions.find((item) => item.type === type);
+    template?.fields
+      .filter((field) => field.required)
+      .forEach((field) => {
+        if (!row.preview[field.name]?.trim())
+          messages.push(`Missing required field: ${field.name}`);
+      });
+
+    const userFields = [
+      "assignedEngineer",
+      "assignee",
+      "owner",
+      "sponsor",
+      "requester",
+      "shiftLead",
+    ];
+    userFields.forEach((field) => {
+      const value = row.preview[field];
+      if (value?.trim() && !isKnownUserReference(value)) {
+        messages.push(`Unknown engineer/user reference: ${value}`);
+      }
+    });
+
+    const assignedEngineers = row.preview.assignedEngineers;
+    if (assignedEngineers?.trim()) {
+      assignedEngineers
+        .split(/[,;\n]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .forEach((engineer) => {
+          if (!isKnownUserReference(engineer)) messages.push(`Unknown engineer name: ${engineer}`);
+        });
+    }
+
+    if (
+      row.preview.priority &&
+      !["Low", "Medium", "High", "Critical"].includes(row.preview.priority)
+    ) {
+      messages.push(`Invalid priority: ${row.preview.priority}`);
+    }
+    if (
+      row.preview.severity &&
+      !["SEV-1", "SEV-2", "SEV-3", "SEV-4"].includes(row.preview.severity)
+    ) {
+      messages.push(`Invalid severity: ${row.preview.severity}`);
+    }
+    if (row.preview.shiftType && !["Morning", "Evening", "Night"].includes(row.preview.shiftType)) {
+      messages.push(`Invalid shift type: ${row.preview.shiftType}`);
+    }
+    ["currentShift", "requestedShift"].forEach((field) => {
+      const value = row.preview[field];
+      if (value && !["Morning", "Evening", "Night"].includes(value)) {
+        messages.push(`Invalid shift type: ${value}`);
+      }
+    });
+
+    const statusFields: Array<[string, string[]]> = [
+      [
+        "status",
+        [
+          "New",
+          "To Do",
+          "Planning",
+          "Active",
+          "Unassigned",
+          "Assigned",
+          "Accepted",
+          "In Progress",
+          "Pending",
+          "Resolved",
+          "Closed",
+          "Completed",
+        ],
+      ],
+      ["slaStatus", ["On Track", "At Risk", "Breached"]],
+      ["coverageStatus", ["Covered", "Understaffed", "Pending Update", "Conflict"]],
+      ["approvalStatus", ["Draft", "In Review", "Approved", "Needs Update"]],
+    ];
+    statusFields.forEach(([field, allowed]) => {
+      const value = row.preview[field];
+      if (value && !allowed.includes(value)) messages.push(`Invalid status: ${value}`);
+    });
+
+    ["date", "dueDate", "startDate", "targetDate", "requestedDate", "lastUpdated"].forEach(
+      (field) => {
+        const value = row.preview[field];
+        if (value && !isValidDate(value)) messages.push(`Invalid date format: ${field}`);
+      },
+    );
+    if (row.preview.createdTime && !isValidDateTime(row.preview.createdTime)) {
+      messages.push("Invalid date format: createdTime");
+    }
+
+    const rowKey = keyForImportRow(type, row.preview);
+    if (rowKey && seen.has(rowKey)) messages.push("Duplicate record in uploaded file");
+    if (rowKey) seen.add(rowKey);
+
+    const hasError = messages.some(
+      (message) =>
+        message.startsWith("Missing") ||
+        message.startsWith("Invalid") ||
+        message.startsWith("Duplicate"),
+    );
+    const validationStatus: ImportRowStatus = hasError
+      ? "Error"
+      : messages.length
+        ? "Warning"
+        : "Valid";
+    return { ...row, validationStatus, messages };
+  });
+}
+
+function summarizeImportRows(rows: ImportJobRow[]) {
+  const errors = rows.filter((row) => row.validationStatus === "Error").length;
+  const warnings = rows.filter((row) => row.validationStatus === "Warning").length;
+  const valid = rows.length - errors;
+  return { total: rows.length, valid, warnings, errors };
+}
+
+function recordImportAudit(
+  actorId: string,
+  action: string,
+  job: Pick<ImportJob, "id" | "importType" | "totalRecords" | "status" | "notes">,
+  result: string,
+) {
+  recordAuditLog({
+    actorId: adminActor(actorId),
+    action,
+    entityType: "import-job",
+    entityId: job.id,
+    after: job,
+    metadata: {
+      module: "Import Center",
+      changedBy: actorId,
+      timestamp: timestamp(),
+      importType: job.importType,
+      recordCount: job.totalRecords,
+      result,
+      notes: job.notes,
+    },
+  });
+}
+
+export const importService = {
+  listTemplates: () => [...importTemplateDefinitions],
+  listJobs: () => repositories.imports.listJobs(),
+  listRows: (jobId: string) => repositories.imports.listRows(jobId),
+  allowedTypesForRole: (role: Role | undefined) =>
+    role
+      ? importTemplateDefinitions.filter((template) => template.allowedRoles.includes(role))
+      : [],
+  canImportType: (role: Role | undefined, type: ImportType) =>
+    !!role &&
+    importTemplateDefinitions.some(
+      (template) => template.type === type && template.allowedRoles.includes(role),
+    ),
+  downloadTemplate: (actorId: string, type: ImportType) => {
+    const template = importTemplateDefinitions.find((item) => item.type === type);
+    if (!template) return "";
+    const header = template.fields.map((field) => field.name).join(",");
+    const sample = template.fields.map((field) => field.example).join(",");
+    const job: ImportJob = {
+      id: createImportId(),
+      importType: type,
+      uploadedBy: actorId,
+      fileName: `${type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-template.csv`,
+      totalRecords: 0,
+      recordsImported: 0,
+      recordsFailed: 0,
+      recordsWithWarnings: 0,
+      status: "Draft",
+      notes: "Template downloaded",
+      createdAt: timestamp(),
+      updatedAt: timestamp(),
+    };
+    repositories.imports.upsertJob(job);
+    recordImportAudit(actorId, "import.template.downloaded", job, "Template downloaded");
+    return `${header}\n${sample}\n`;
+  },
+  uploadFile: (actorId: string, type: ImportType, fileName: string) => {
+    const template = importTemplateDefinitions.find((item) => item.type === type);
+    if (!template) return null;
+    const now = timestamp();
+    const job: ImportJob = {
+      id: createImportId(),
+      importType: type,
+      uploadedBy: actorId,
+      fileName,
+      totalRecords: 4,
+      recordsImported: 0,
+      recordsFailed: 0,
+      recordsWithWarnings: 0,
+      status: "Draft",
+      notes: "Mock file uploaded. Run validation before confirming import.",
+      createdAt: now,
+      updatedAt: now,
+    };
+    repositories.imports.upsertJob(job);
+    repositories.imports.replaceRows(job.id, createMockRows(template, job.id));
+    recordImportAudit(actorId, "import.file.uploaded", job, "File uploaded");
+    return job;
+  },
+  validate: (actorId: string, jobId: string) => {
+    const job = repositories.imports.getJob(jobId);
+    if (!job) return null;
+    const rows = validateImportRows(job.importType, repositories.imports.listRows(jobId));
+    repositories.imports.replaceRows(jobId, rows);
+    const summary = summarizeImportRows(rows);
+    const status: ImportJobStatus = summary.errors === rows.length ? "Failed" : "Validated";
+    const updated: ImportJob = {
+      ...job,
+      totalRecords: summary.total,
+      recordsImported: 0,
+      recordsFailed: summary.errors,
+      recordsWithWarnings: summary.warnings,
+      status,
+      notes:
+        summary.errors > 0
+          ? "Validation completed with errors. Fix errors before production import."
+          : "Validation completed. Ready to confirm.",
+      updatedAt: timestamp(),
+    };
+    repositories.imports.upsertJob(updated);
+    recordImportAudit(actorId, "import.validation.completed", updated, updated.status);
+    return updated;
+  },
+  confirm: (actorId: string, jobId: string) => {
+    const job = repositories.imports.getJob(jobId);
+    if (!job) return null;
+    const rows = repositories.imports.listRows(jobId);
+    const summary = summarizeImportRows(rows);
+    const updated: ImportJob = {
+      ...job,
+      recordsImported: summary.valid,
+      recordsFailed: summary.errors,
+      recordsWithWarnings: summary.warnings,
+      status: summary.valid > 0 ? "Imported" : "Failed",
+      notes:
+        summary.valid > 0
+          ? "Mock import completed. Future MySQL implementation will write valid rows to target tables."
+          : "Import failed because no valid rows were available.",
+      updatedAt: timestamp(),
+    };
+    repositories.imports.upsertJob(updated);
+    recordImportAudit(
+      actorId,
+      updated.status === "Imported" ? "import.confirmed" : "import.failed",
+      updated,
+      updated.status,
+    );
+    return updated;
+  },
+  cancel: (actorId: string, jobId: string) => {
+    const job = repositories.imports.getJob(jobId);
+    if (!job) return null;
+    const updated: ImportJob = {
+      ...job,
+      status: "Cancelled",
+      notes: "Import cancelled before confirmation.",
+      updatedAt: timestamp(),
+    };
+    repositories.imports.upsertJob(updated);
+    recordImportAudit(actorId, "import.cancelled", updated, "Cancelled");
+    return updated;
+  },
+  rerun: (actorId: string, jobId: string) => {
+    const job = repositories.imports.getJob(jobId);
+    if (!job) return null;
+    return importService.uploadFile(actorId, job.importType, `rerun-${job.fileName}`);
+  },
+  errorReport: (actorId: string, jobId: string) => {
+    const job = repositories.imports.getJob(jobId);
+    if (!job) return "";
+    const rows = repositories.imports
+      .listRows(jobId)
+      .filter((row) => row.validationStatus !== "Valid");
+    recordImportAudit(actorId, "import.error-report.downloaded", job, "Error report downloaded");
+    return rows
+      .map((row) => `${row.rowNumber},"${row.validationStatus}","${row.messages.join("; ")}"`)
+      .join("\n");
+  },
+};
+
+function createRuleId(prefix: string) {
+  return `${prefix}-${Date.now()}`;
+}
+
+function updateConfigItem<T extends { id: string }>(
+  collection: T[],
+  id: string,
+  actorId: string,
+  entityType: AuditEntityType,
+  input: Partial<T>,
+) {
+  const item = collection.find((entry) => entry.id === id);
+  if (!item) return null;
+  const before = { ...item };
+  Object.assign(item, input);
+  recordAuditLog({
+    actorId: adminActor(actorId),
+    action: `${entityType}.updated`,
+    entityType,
+    entityId: id,
+    before,
+    after: { ...item },
+  });
+  return item;
+}
+
+function archiveConfigItem<T extends { id: string; active?: boolean; enabled?: boolean }>(
+  collection: T[],
+  id: string,
+  actorId: string,
+  entityType: AuditEntityType,
+) {
+  const item = collection.find((entry) => entry.id === id);
+  if (!item) return null;
+  const before = { ...item };
+  if ("active" in item) item.active = false;
+  if ("enabled" in item) item.enabled = false;
+  recordAuditLog({
+    actorId: adminActor(actorId),
+    action: `${entityType}.archived`,
+    entityType,
+    entityId: id,
+    before,
+    after: { ...item },
+  });
+  return item;
+}
+
+export const configurationService = {
+  listTaskTemplates: () => [...taskTemplates],
+  createTaskTemplate: (actorId: string) => {
+    const template: TaskTemplate = {
+      id: createRuleId("task-template"),
+      name: "New Daily Operations Template",
+      description: "Define checklist, evidence and recurrence before generating tasks.",
+      type: "Daily DC Operation",
+      recurrence: "Daily",
+      ownerTeam: "DC",
+      checklist: ["Add checklist item"],
+      evidenceRequired: true,
+      sharedDailyOperation: true,
+      active: true,
+    };
+    taskTemplates.unshift(template);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "task-template.created",
+      entityType: "task-template",
+      entityId: template.id,
+      after: template,
+    });
+    return template;
+  },
+  updateTaskTemplate: (id: string, actorId: string, input: Partial<TaskTemplate>) =>
+    updateConfigItem(taskTemplates, id, actorId, "task-template", input),
+  archiveTaskTemplate: (id: string, actorId: string) =>
+    archiveConfigItem(taskTemplates, id, actorId, "task-template"),
+
+  listIncidentRules: () => [...incidentRules],
+  createIncidentRule: (actorId: string) => {
+    const rule: IncidentRule = {
+      id: createRuleId("incident-rule"),
+      category: "Unknown",
+      defaultSeverity: "SEV-3",
+      slaMinutes: 60,
+      assignmentTeam: "Shared",
+      recommendedSop: "Select recommended SOP",
+      escalationPath: "Shift Lead -> Manager",
+      active: true,
+    };
+    incidentRules.unshift(rule);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "incident-rule.created",
+      entityType: "incident-rule",
+      entityId: rule.id,
+      after: rule,
+    });
+    return rule;
+  },
+  updateIncidentRule: (id: string, actorId: string, input: Partial<IncidentRule>) =>
+    updateConfigItem(incidentRules, id, actorId, "incident-rule", input),
+  archiveIncidentRule: (id: string, actorId: string) =>
+    archiveConfigItem(incidentRules, id, actorId, "incident-rule"),
+
+  listProjectTemplates: () => [...projectTemplates],
+  createProjectTemplate: (actorId: string) => {
+    const template: ProjectTemplate = {
+      id: createRuleId("project-template"),
+      name: "New Project Template",
+      description: "Define reusable phases and governance gate before creating projects.",
+      defaultTeam: "Shared",
+      phases: ["Initiation", "Execution", "Validation"],
+      governanceGate: "Manager review required before closure",
+      active: true,
+    };
+    projectTemplates.unshift(template);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "project-template.created",
+      entityType: "project-template",
+      entityId: template.id,
+      after: template,
+    });
+    return template;
+  },
+  updateProjectTemplate: (id: string, actorId: string, input: Partial<ProjectTemplate>) =>
+    updateConfigItem(projectTemplates, id, actorId, "project-template", input),
+  archiveProjectTemplate: (id: string, actorId: string) =>
+    archiveConfigItem(projectTemplates, id, actorId, "project-template"),
+
+  listRosterRules: () => [...rosterRules],
+  createRosterRule: (actorId: string) => {
+    const rule: RosterRule = {
+      id: createRuleId("roster-rule"),
+      name: "New Roster Rule",
+      description: "Define coverage, mandatory assignment and fairness guidance.",
+      pattern: "Three shifts per day with weekly review",
+      mandatoryShift: "Any",
+      fairnessTarget: "Balance nights, weekends and handover load",
+      active: true,
+    };
+    rosterRules.unshift(rule);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "roster-rule.created",
+      entityType: "roster-rule",
+      entityId: rule.id,
+      after: rule,
+    });
+    return rule;
+  },
+  updateRosterRule: (id: string, actorId: string, input: Partial<RosterRule>) =>
+    updateConfigItem(rosterRules, id, actorId, "roster-rule", input),
+  archiveRosterRule: (id: string, actorId: string) =>
+    archiveConfigItem(rosterRules, id, actorId, "roster-rule"),
+
+  listHandoverTemplates: () => [...handoverTemplates],
+  createHandoverTemplate: (actorId: string) => {
+    const template: HandoverTemplate = {
+      id: createRuleId("handover-template"),
+      name: "New Handover Template",
+      description: "Define required categories and acknowledgement rules.",
+      requiredCategories: ["General"],
+      requiresAcknowledgement: true,
+      criticalRequiresNextAction: true,
+      active: true,
+    };
+    handoverTemplates.unshift(template);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "handover-template.created",
+      entityType: "handover-template",
+      entityId: template.id,
+      after: template,
+    });
+    return template;
+  },
+  updateHandoverTemplate: (id: string, actorId: string, input: Partial<HandoverTemplate>) =>
+    updateConfigItem(handoverTemplates, id, actorId, "handover-template", input),
+  archiveHandoverTemplate: (id: string, actorId: string) =>
+    archiveConfigItem(handoverTemplates, id, actorId, "handover-template"),
+
+  listSopSettings: () => [...sopSettings],
+  createSopSetting: (actorId: string) => {
+    const setting: SopSetting = {
+      id: createRuleId("sop-setting"),
+      name: "New SOP Setting",
+      category: "Runbook",
+      approvalWorkflow: "Author -> Reviewer -> Approver",
+      visibilityRule: "Visible after approval",
+      linkableTo: ["Tasks", "Incidents"],
+      active: true,
+    };
+    sopSettings.unshift(setting);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "sop-setting.created",
+      entityType: "sop-setting",
+      entityId: setting.id,
+      after: setting,
+    });
+    return setting;
+  },
+  updateSopSetting: (id: string, actorId: string, input: Partial<SopSetting>) =>
+    updateConfigItem(sopSettings, id, actorId, "sop-setting", input),
+  archiveSopSetting: (id: string, actorId: string) =>
+    archiveConfigItem(sopSettings, id, actorId, "sop-setting"),
+
+  listDashboardWidgets: () => [...dashboardWidgetSettings],
+  createDashboardWidget: (actorId: string) => {
+    const widget: DashboardWidgetSetting = {
+      id: createRuleId("dashboard-widget"),
+      role: "manager",
+      widget: "New Widget",
+      description: "Define widget purpose and who should see it.",
+      enabled: true,
+      governanceSignal: "Role Restricted",
+    };
+    dashboardWidgetSettings.unshift(widget);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "dashboard-widget.created",
+      entityType: "dashboard-widget",
+      entityId: widget.id,
+      after: widget,
+    });
+    return widget;
+  },
+  updateDashboardWidget: (id: string, actorId: string, input: Partial<DashboardWidgetSetting>) =>
+    updateConfigItem(dashboardWidgetSettings, id, actorId, "dashboard-widget", input),
+  archiveDashboardWidget: (id: string, actorId: string) =>
+    archiveConfigItem(dashboardWidgetSettings, id, actorId, "dashboard-widget"),
+
+  listSlaPolicies: () => [...slaEscalationPolicies],
+  createSlaPolicy: (actorId: string) => {
+    const policy: SlaEscalationPolicy = {
+      id: createRuleId("sla-policy"),
+      name: "New SLA Policy",
+      appliesTo: "Incidents",
+      thresholdMinutes: 60,
+      escalationOwner: "Shared",
+      active: true,
+    };
+    slaEscalationPolicies.unshift(policy);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "sla-policy.created",
+      entityType: "sla-policy",
+      entityId: policy.id,
+      after: policy,
+    });
+    return policy;
+  },
+  updateSlaPolicy: (id: string, actorId: string, input: Partial<SlaEscalationPolicy>) =>
+    updateConfigItem(slaEscalationPolicies, id, actorId, "sla-policy", input),
+  archiveSlaPolicy: (id: string, actorId: string) =>
+    archiveConfigItem(slaEscalationPolicies, id, actorId, "sla-policy"),
+};
+
 export const taskService = {
   list: () => [...tasks],
+  createFromTemplate: (actorId: string, templateId: string) => {
+    const template = taskTemplates.find((item) => item.id === templateId && item.active);
+    if (!template) return null;
+    const task = {
+      id: nextNumericId(
+        "TASK-",
+        tasks.map((item) => item.id),
+      ),
+      title: template.name,
+      description: `${template.description}\n\nChecklist:\n${template.checklist
+        .map((item) => `- ${item}`)
+        .join("\n")}`,
+      type: template.type,
+      category: template.ownerTeam === "NOC" ? "Network" : "DC Operations",
+      priority: "Medium" as const,
+      impact: "Medium" as const,
+      status: "New" as const,
+      assignee: template.sharedDailyOperation ? "shared" : null,
+      dueDate: new Date().toISOString().slice(0, 10),
+      sla: "On Track" as const,
+      comments: 0,
+      evidence: template.evidenceRequired ? 1 : 0,
+      audit: "Pending" as const,
+    };
+    tasks.unshift(task);
+    recordAuditLog({
+      actorId,
+      action: "task.generated-from-template",
+      entityType: "task",
+      entityId: task.id,
+      after: { task, templateId },
+    });
+    return task;
+  },
   updateStatus: (taskId: string, status: TaskStatus, actorId: string) => {
     const task = tasks.find((item) => item.id === taskId);
     if (!task) return null;
@@ -457,18 +1144,21 @@ export const incidentService = {
     actorId: string,
     input: Pick<Incident, "title" | "description" | "source" | "category">,
   ) => {
+    const rule = incidentRules.find((item) => item.category === input.category && item.active);
     const incident: Incident = {
       id: nextNumericId(
         "INC-",
         incidents.map((incident) => incident.id),
       ),
       title: input.title,
-      description: input.description,
+      description: rule
+        ? `${input.description}\n\nRule applied: ${rule.recommendedSop} / SLA ${rule.slaMinutes} min`
+        : input.description,
       source: input.source,
-      sourceRef: "Manual Entry",
+      sourceRef: rule ? `Rule: ${rule.id}` : "Manual Entry",
       category: input.category,
-      subcategory: "General",
-      severity: "SEV-3",
+      subcategory: rule?.recommendedSop ?? "General",
+      severity: rule?.defaultSeverity ?? "SEV-3",
       status: "Unassigned",
       assignee: null,
       sla: "On Track",
@@ -555,6 +1245,60 @@ export const projectService = {
   get: (projectId: string) => projects.find((project) => project.id === projectId) ?? null,
   listTasks: (projectId?: string) =>
     projectId ? projectTasks.filter((task) => task.projectId === projectId) : [...projectTasks],
+  createFromTemplate: (actorId: string, templateId: string) => {
+    const template = projectTemplates.find((item) => item.id === templateId && item.active);
+    if (!template) return null;
+    const now = new Date();
+    const target = new Date(now);
+    target.setDate(target.getDate() + 30);
+    const project = {
+      id: nextNumericId(
+        "PRJ-",
+        projects.map((item) => item.id),
+      ),
+      name: template.name,
+      description: template.description,
+      type: "Operational Improvement" as const,
+      owner: actorId,
+      sponsor: actorId,
+      team: template.defaultTeam,
+      priority: "Medium" as const,
+      impact: "Medium" as const,
+      status: "Planning" as const,
+      startDate: now.toISOString().slice(0, 10),
+      targetDate: target.toISOString().slice(0, 10),
+      completion: 0,
+      risk: "Low" as const,
+      blockers: [],
+    };
+    projects.unshift(project);
+    template.phases.forEach((phase, index) => {
+      projectTasks.push({
+        id: nextNumericId(
+          "PT-",
+          projectTasks.map((task) => task.id),
+        ),
+        projectId: project.id,
+        title: phase,
+        description: `${phase} - ${template.governanceGate}`,
+        assignee: actorId,
+        status: index === 0 ? "To Do" : "To Do",
+        priority: "Medium",
+        dueDate: project.targetDate,
+        completion: 0,
+        comments: 0,
+        evidence: 0,
+      });
+    });
+    recordAuditLog({
+      actorId,
+      action: "project.generated-from-template",
+      entityType: "project",
+      entityId: project.id,
+      after: { project, templateId },
+    });
+    return project;
+  },
   createTask: (projectId: string, actorId: string): ProjectTask | null => {
     const project = projects.find((item) => item.id === projectId);
     if (!project) return null;
@@ -817,6 +1561,8 @@ export const shiftService = {
     let updated = 0;
     let skipped = 0;
     const dates = datesForMonth(input.month);
+    const activeRosterRules = rosterRules.filter((rule) => rule.active);
+    let mandatoryAssignmentsApplied = 0;
 
     dates.forEach((date) => {
       input.shiftTypes.forEach((type) => {
@@ -827,6 +1573,17 @@ export const shiftService = {
         }
 
         const engineers = Array.from(new Set(input.engineers));
+        activeRosterRules.forEach((rule) => {
+          const appliesToShift = rule.mandatoryShift === "Any" || rule.mandatoryShift === type;
+          if (
+            rule.mandatoryEngineer &&
+            appliesToShift &&
+            !engineers.includes(rule.mandatoryEngineer)
+          ) {
+            engineers.push(rule.mandatoryEngineer);
+            mandatoryAssignmentsApplied += 1;
+          }
+        });
         if (input.shiftLead && !engineers.includes(input.shiftLead))
           engineers.push(input.shiftLead);
 
@@ -860,6 +1617,10 @@ export const shiftService = {
       created,
       updated,
       skipped,
+      mandatoryAssignmentsApplied,
+      fairnessSummary:
+        activeRosterRules.find((rule) => rule.fairnessTarget)?.fairnessTarget ??
+        "Review night, weekend and handover load manually.",
     };
     recordAuditLog({
       actorId: adminActor(actorId),

@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/lib/auth";
 import { userById, type HandoverCategory, type HandoverPoint, type Priority } from "@/lib/data";
 import { canAuditHandover, canSubmitHandover } from "@/lib/rbac";
-import { handoverService, shiftService } from "@/lib/services";
+import { configurationService, handoverService, shiftService } from "@/lib/services";
 import { Plus, ClipboardList, CheckCheck, AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -63,6 +63,9 @@ function HandoverPage() {
     shiftOptions[0]?.name ?? "Morning",
   );
   const [draftRows, setDraftRows] = useState<DraftHandoverRow[]>(() => [createDraftRow()]);
+  const handoverTemplates = configurationService
+    .listHandoverTemplates()
+    .filter((template) => template.active);
 
   const canAudit = canAuditHandover(user);
   const canSubmit = canSubmitHandover(user);
@@ -152,7 +155,7 @@ function HandoverPage() {
               onClick={() => setShowForm((value) => !value)}
               className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90"
             >
-              <Plus className="h-4 w-4" /> Add Handover Rows
+              <Plus className="h-4 w-4" /> Prepare Handover Rows
             </button>
           )
         }
@@ -185,6 +188,32 @@ function HandoverPage() {
           tone="warning"
         />
       </div>
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">Handover Quality Rules</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Admin-defined templates guide required categories, critical acknowledgements and
+              review quality.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {handoverTemplates.slice(0, 4).map((template) => (
+              <StatusBadge
+                key={template.id}
+                status={
+                  template.requiresAcknowledgement ? "Acknowledgement Required" : template.name
+                }
+                tone={template.requiresAcknowledgement ? "warning" : "info"}
+              />
+            ))}
+            {!handoverTemplates.length ? (
+              <StatusBadge status="No active templates" tone="neutral" />
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       {showForm && canSubmit ? (
         <section className="mb-6 rounded-lg border border-border bg-card p-4">
@@ -295,7 +324,7 @@ function HandoverPage() {
               onClick={submitHandoverRows}
               className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90"
             >
-              <CheckCheck className="h-4 w-4" /> Submit Rows
+              <CheckCheck className="h-4 w-4" /> Save Handover Rows
             </button>
           </div>
         </section>

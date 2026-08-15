@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { userById } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canManageSops } from "@/lib/rbac";
-import { sopService } from "@/lib/services";
+import { configurationService, sopService } from "@/lib/services";
 import { Search, Download, FileText, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ export const Route = createFileRoute("/sop")({
 function SOPPage() {
   const { user } = useAuth();
   const [rows] = useState(() => sopService.list());
+  const sopSettings = configurationService.listSopSettings().filter((setting) => setting.active);
   const canManage = canManageSops(user);
   const categories = Array.from(new Set(rows.map((s) => s.category)));
   const types = Array.from(new Set(rows.map((s) => s.type)));
@@ -41,7 +42,7 @@ function SOPPage() {
     <div className="p-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="SOP Library"
-        subtitle="Standard procedures, runbooks, troubleshooting guides and audit documents"
+        subtitle="Approved procedures, runbooks, troubleshooting guides and operational evidence."
         actions={
           canManage ? (
             <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
@@ -53,6 +54,34 @@ function SOPPage() {
 
       <div className="grid grid-cols-12 gap-4">
         <div className="col-span-12 lg:col-span-3 space-y-4">
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="font-semibold text-sm mb-1">Governance Settings</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              SOP behavior is configured by category, approval workflow and visibility rules.
+            </p>
+            <div className="space-y-2">
+              {sopSettings.slice(0, 4).map((setting) => (
+                <div key={setting.id} className="rounded-md border border-border bg-background p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{setting.category}</span>
+                    <StatusBadge
+                      status={setting.approvalWorkflow ? "Requires Review" : "Approved"}
+                      tone={setting.approvalWorkflow ? "warning" : "success"}
+                    />
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Visibility: {setting.visibilityRule || "Not set"}
+                  </div>
+                </div>
+              ))}
+              {!sopSettings.length ? (
+                <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-sm text-muted-foreground">
+                  No SOP settings configured yet.
+                </div>
+              ) : null}
+            </div>
+          </div>
+
           <div className="rounded-lg border border-border bg-card p-4">
             <h3 className="font-semibold text-sm mb-3">Categories</h3>
             <div className="space-y-1">
@@ -100,7 +129,7 @@ function SOPPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search documents…"
+              placeholder="Search documents..."
               className="flex-1 bg-transparent text-sm outline-none"
             />
             <span className="text-xs text-muted-foreground">{filtered.length} results</span>
@@ -113,7 +142,7 @@ function SOPPage() {
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <FileText className="h-3.5 w-3.5" /> {s.id} · v{s.version}
+                    <FileText className="h-3.5 w-3.5" /> {s.id} - v{s.version}
                   </div>
                   <StatusBadge status={s.approval} />
                 </div>
@@ -131,7 +160,7 @@ function SOPPage() {
                 </div>
                 <div className="mt-3 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
                   <span>
-                    {s.type} · {s.category}
+                    {s.type} - {s.category}
                   </span>
                   <button
                     onClick={() => recordDownload(s.id)}
@@ -141,10 +170,18 @@ function SOPPage() {
                   </button>
                 </div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  Updated {s.lastUpdated} · by {userById(s.createdBy).split(" ")[0]}
+                  Updated {s.lastUpdated} - by {userById(s.createdBy).split(" ")[0]}
                 </div>
               </div>
             ))}
+            {!filtered.length ? (
+              <div className="md:col-span-2 rounded-lg border border-dashed border-border bg-card px-6 py-10 text-center">
+                <div className="text-sm font-medium">No SOP documents match these filters</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Adjust filters or add approved SOP documents when your repository is ready.
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

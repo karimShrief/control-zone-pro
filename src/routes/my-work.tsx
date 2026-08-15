@@ -33,8 +33,8 @@ function MyWork() {
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
       <PageHeader
-        title={`My Work — ${user.name.split(" ")[0]}`}
-        subtitle="Your assigned items, shared operations, and shift context"
+        title={`My Work - ${user.name.split(" ")[0]}`}
+        subtitle="Your shift-focused workspace for assigned work, incidents, handover and shared DC operations."
         actions={
           <>
             <Link
@@ -98,7 +98,11 @@ function MyWork() {
             ))}
           </Section>
 
-          <Section title="Shared Daily DC Operations" badge="All engineers can update">
+          <Section
+            title="Shared Daily DC Operations"
+            badge="All engineers can update"
+            empty={sharedTasks.length === 0 ? "No shared Daily DC Operations are open" : undefined}
+          >
             {sharedTasks.map((t) => (
               <Row
                 key={t.id}
@@ -114,7 +118,10 @@ function MyWork() {
             ))}
           </Section>
 
-          <Section title="My Project Subtasks">
+          <Section
+            title="My Project Actions"
+            empty={mySubtasks.length === 0 ? "No project actions assigned to you" : undefined}
+          >
             {mySubtasks.map((pt) => (
               <Row
                 key={pt.id}
@@ -133,7 +140,11 @@ function MyWork() {
             ))}
           </Section>
 
-          <Section title="Unassigned Items" badge="Pick up if you have capacity">
+          <Section
+            title="Unassigned Items"
+            badge="Pick up if you have capacity"
+            empty={unassigned.length === 0 ? "No unassigned work is waiting right now" : undefined}
+          >
             {unassigned.map((t) => (
               <Row
                 key={t.id}
@@ -156,7 +167,7 @@ function MyWork() {
         <div className="space-y-4">
           <ShiftClockCard />
 
-          {myShift && (
+          {myShift ? (
             <div className="rounded-lg border border-border bg-card p-4">
               <h3 className="font-semibold mb-2 text-sm">On shift with you</h3>
               <div className="flex flex-wrap gap-1.5">
@@ -169,13 +180,20 @@ function MyWork() {
                   ))}
               </div>
             </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h3 className="font-semibold mb-1 text-sm">My Shift</h3>
+              <p className="text-sm text-muted-foreground">
+                No shift is assigned to you for today.
+              </p>
+            </div>
           )}
 
           <div className="rounded-lg border border-border bg-card p-4">
             <h3 className="font-semibold mb-3">My Incidents</h3>
             <div className="space-y-2">
               {myIncidents.length === 0 && (
-                <div className="text-sm text-muted-foreground">No incidents assigned</div>
+                <div className="text-sm text-muted-foreground">No incidents assigned to you</div>
               )}
               {myIncidents.map((i) => (
                 <div key={i.id} className="flex items-center gap-2 text-sm">
@@ -191,7 +209,9 @@ function MyWork() {
             <h3 className="font-semibold mb-3">My Handover Points</h3>
             <div className="space-y-2">
               {myHandover.length === 0 && (
-                <div className="text-sm text-muted-foreground">None submitted</div>
+                <div className="text-sm text-muted-foreground">
+                  No handover points submitted for your shift
+                </div>
               )}
               {myHandover.map((h) => (
                 <div key={h.id} className="text-sm">
@@ -200,7 +220,7 @@ function MyWork() {
                     <StatusBadge status={h.status} />
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {h.shift} · {h.date}
+                    {h.shift} - {h.date}
                   </div>
                 </div>
               ))}

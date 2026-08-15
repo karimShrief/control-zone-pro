@@ -1,10 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader, KpiCard } from "@/components/AppShell";
+import {
+  CONFIGURATION_CENTER_TABS,
+  ConfigurationRulePanel,
+  type ConfigurationCenterTab,
+} from "@/components/ConfigurationCenterSections";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/lib/auth";
-import { listAuditLogs } from "@/lib/audit-log";
 import {
+  auditService,
   categoryService,
   roleService,
   shiftService,
@@ -54,10 +59,17 @@ const TABS = [
   "Users",
   "Roles & Permissions",
   "Teams",
-  "Shift Settings",
+  "Task Templates",
+  "Incident Rules",
+  "Project Templates",
+  "Shift & Roster Rules",
+  "Handover Templates",
+  "SOP Settings",
+  "Dashboard Settings",
+  "SLA & Escalation",
   "Categories",
   "Statuses",
-  "System Settings",
+  "Audit Logs",
 ] as const;
 
 const ROLE_OPTIONS: Role[] = ["engineer", "shift-lead", "manager", "executive", "admin"];
@@ -110,7 +122,7 @@ function AdminPage() {
   const [categories, setCategories] = useState(() => categoryService.list());
   const [statuses, setStatuses] = useState(() => statusConfigService.list());
   const [settings, setSettings] = useState<SystemSettings>(() => systemConfigService.get());
-  const [activity, setActivity] = useState(() => listAuditLogs());
+  const [activity, setActivity] = useState(() => auditService.list());
 
   const [userEditId, setUserEditId] = useState<string | "new" | null>(null);
   const [userForm, setUserForm] = useState({
@@ -183,7 +195,7 @@ function AdminPage() {
     setCategories(categoryService.list());
     setStatuses(statusConfigService.list());
     setSettings(systemConfigService.get());
-    setActivity(listAuditLogs());
+    setActivity(auditService.list());
   };
 
   const startAddUser = () => {
@@ -472,7 +484,7 @@ function AdminPage() {
     });
     refresh();
     setMonthBuildSummary(
-      `${result.created} created, ${result.updated} updated, ${result.skipped} skipped for ${result.month}.`,
+      `${result.created} created, ${result.updated} updated, ${result.skipped} skipped for ${result.month}. Mandatory assignments applied: ${result.mandatoryAssignmentsApplied}. Fairness: ${result.fairnessSummary}`,
     );
     toast.success(`Monthly roster built for ${result.month}`);
   };
@@ -521,8 +533,8 @@ function AdminPage() {
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-6">
       <PageHeader
-        title="Admin Configuration"
-        subtitle="Manage users, roles, teams, roster settings, categories, statuses and basic system settings."
+        title="Configuration Center"
+        subtitle="Configure users, rules, templates, roster behavior, dashboards and governance without developer changes."
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-4">
@@ -536,10 +548,11 @@ function AdminPage() {
             />
             <KpiCard label="Teams" value={teams.filter((team) => team.active).length} />
             <KpiCard
-              label="Config Items"
+              label="Rule Library"
               value={categories.length + statuses.length}
               icon={Cog}
               tone="neutral"
+              sub="Templates, rules and statuses"
             />
           </div>
 
@@ -801,13 +814,30 @@ function AdminPage() {
             </ConfigSection>
           ) : null}
 
-          {tab === "Shift Settings" ? (
+          {CONFIGURATION_CENTER_TABS.includes(tab as ConfigurationCenterTab) ? (
+            <ConfigurationRulePanel
+              tab={tab as ConfigurationCenterTab}
+              actorId={actorId}
+              users={users}
+              teams={teams}
+              onChange={refresh}
+            />
+          ) : null}
+
+          {tab === "Shift & Roster Rules" ? (
             <ConfigSection
-              title="Shift Settings"
-              description="Configure roster timings, minimum staffing, coverage rules and shift assignment rows."
+              title="Roster Builder & Shift Timings"
+              description="Configure roster timings, minimum staffing, work patterns, mandatory assignments and shift assignment rows."
               addLabel="Save Coverage Rules"
               onAdd={saveCoverageRules}
             >
+              <ConfigurationRulePanel
+                tab="Shift & Roster Rules"
+                actorId={actorId}
+                users={users}
+                teams={teams}
+                onChange={refresh}
+              />
               <div>
                 <h3 className="text-sm font-semibold">Coverage rules</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -1321,10 +1351,10 @@ function AdminPage() {
             </ConfigSection>
           ) : null}
 
-          {tab === "System Settings" ? (
+          {tab === "Dashboard Settings" ? (
             <ConfigSection
-              title="System Settings"
-              description="Configure basic UI naming, logo placeholder, theme preference and enabled modules."
+              title="System & Dashboard Settings"
+              description="Configure app naming, theme preference, enabled modules and navigation visibility per role."
               addLabel="Save Settings"
               onAdd={saveSystemSettings}
             >
@@ -1424,9 +1454,63 @@ function AdminPage() {
               </div>
             </ConfigSection>
           ) : null}
+
+          {tab === "Audit Logs" ? (
+            <ConfigSection
+              title="Audit Logs"
+              description="Review configuration history, role changes, roster updates and operational governance events."
+              addLabel="Refresh Logs"
+              onAdd={refresh}
+            >
+              <Table>
+                <thead>
+                  <HeaderRow labels={["Time", "Action", "Entity", "Actor", "Governance"]} />
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {activity.map((entry) => (
+                    <tr key={entry.id} className="hover:bg-muted/30">
+                      <Cell mono>{entry.createdAt}</Cell>
+                      <Cell strong>{humanAction(entry.action)}</Cell>
+                      <Cell>
+                        {entry.entityType} / {entry.entityId}
+                      </Cell>
+                      <Cell>{userById(entry.actorId)}</Cell>
+                      <Cell>
+                        <StatusBadge status="Configuration Change Logged" tone="info" />
+                      </Cell>
+                    </tr>
+                  ))}
+                  {!activity.length ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-10 text-center text-sm text-muted-foreground"
+                      >
+                        No configuration changes logged yet.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </Table>
+            </ConfigSection>
+          ) : null}
         </div>
 
         <aside className="rounded-lg border border-border bg-card p-4 h-fit">
+          <Link
+            to="/import-center"
+            className="mb-4 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/10 p-3 hover:bg-primary/15"
+          >
+            <div className="rounded-md bg-primary/15 p-2 text-primary">
+              <Upload className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold">Import Center</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Download templates, validate files and review import history.
+              </p>
+            </div>
+          </Link>
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold">Recent Admin Activity</h2>

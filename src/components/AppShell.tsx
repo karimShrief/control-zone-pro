@@ -26,6 +26,7 @@ import {
   Monitor,
   Moon,
   Sun,
+  Upload,
   UserCircle2,
 } from "lucide-react";
 import {
@@ -56,21 +57,21 @@ interface NavItem {
 const NAV: NavItem[] = [
   {
     to: "/dashboard",
-    label: "Command Dashboard",
+    label: "Command View",
     module: "Dashboard",
     icon: LayoutDashboard,
     roles: ["manager", "executive", "admin"],
   },
   {
     to: "/my-work",
-    label: "My Work Queue",
+    label: "My Work",
     module: "My Work",
     icon: Briefcase,
     roles: ["engineer", "shift-lead"],
   },
   {
     to: "/tasks",
-    label: "Task Control",
+    label: "Daily Operations",
     module: "Tasks",
     icon: ListChecks,
     roles: ["engineer", "shift-lead", "manager", "admin"],
@@ -80,18 +81,18 @@ const NAV: NavItem[] = [
     label: "Incident Control",
     module: "Incidents",
     icon: AlertTriangle,
-    roles: ["engineer", "manager", "executive", "admin"],
+    roles: ["engineer", "shift-lead", "manager", "executive", "admin"],
   },
   {
     to: "/projects",
-    label: "Projects",
+    label: "Projects & Readiness",
     module: "Projects",
     icon: FolderKanban,
-    roles: ["engineer", "manager", "executive", "admin"],
+    roles: ["engineer", "shift-lead", "manager", "executive", "admin"],
   },
   {
     to: "/shifts",
-    label: "Shift Roster",
+    label: "Shift Control",
     module: "Shift Roster",
     icon: CalendarDays,
     roles: ["engineer", "shift-lead", "manager", "executive", "admin"],
@@ -105,7 +106,7 @@ const NAV: NavItem[] = [
   },
   {
     to: "/handover",
-    label: "Shift Handover",
+    label: "Handover Quality",
     module: "Handover",
     icon: ClipboardList,
     roles: ["engineer", "shift-lead", "manager", "admin"],
@@ -115,11 +116,18 @@ const NAV: NavItem[] = [
     label: "SOP Library",
     module: "SOP Library",
     icon: BookOpen,
-    roles: ["engineer", "manager", "executive", "admin"],
+    roles: ["engineer", "shift-lead", "manager", "executive", "admin"],
+  },
+  {
+    to: "/import-center",
+    label: "Import Center",
+    module: "Import Center",
+    icon: Upload,
+    roles: ["shift-lead", "manager", "executive", "admin"],
   },
   {
     to: "/productivity",
-    label: "Productivity",
+    label: "Team Productivity",
     module: "Productivity",
     icon: BarChart3,
     roles: ["manager", "executive", "admin"],
@@ -129,9 +137,15 @@ const NAV: NavItem[] = [
     label: "Reports",
     module: "Reports",
     icon: FileText,
-    roles: ["manager", "executive", "admin"],
+    roles: ["shift-lead", "manager", "executive", "admin"],
   },
-  { to: "/admin", label: "Admin Config", module: "Admin", icon: ShieldCheck, roles: ["admin"] },
+  {
+    to: "/admin",
+    label: "Configuration Center",
+    module: "Admin",
+    icon: ShieldCheck,
+    roles: ["admin"],
+  },
 ];
 
 const THEME_EVENT = "ops-system-settings-changed";
@@ -185,7 +199,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (!canAccessPath(user, path)) return <Navigate to={landingFor(user.role)} />;
+  if (!canAccessPath(user, path)) {
+    if (path.startsWith("/import-center")) return <PermissionDenied />;
+    return <Navigate to={landingFor(user.role)} />;
+  }
 
   const roleConfig = roleConfigs.find((role) => role.id === user.role);
   const items = NAV.filter(
@@ -205,15 +222,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen w-full bg-background">
       {/* Sidebar */}
-      <aside className="flex w-64 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-        <div className="flex h-16 items-center gap-2 px-5 border-b border-sidebar-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+      <aside className="flex w-[17rem] flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl shadow-sidebar/10">
+        <div className="flex h-16 items-center gap-3 px-5 border-b border-sidebar-border">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
             <Activity className="h-5 w-5" />
           </div>
           <div>
             <div className="text-sm font-semibold tracking-tight">{systemSettings.appName}</div>
             <div className="text-[11px] text-sidebar-foreground/60 uppercase tracking-wider">
-              DC / NOC Platform
+              Operations Command
             </div>
           </div>
         </div>
@@ -226,9 +243,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
                   active
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium shadow-sm"
                     : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                 )}
               >
@@ -269,18 +286,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 flex items-center justify-between border-b border-border bg-card px-6">
-          <div className="flex items-center gap-3 flex-1 max-w-md">
+        <header className="sticky top-0 z-20 h-16 flex items-center justify-between border-b border-border bg-card/90 px-6 backdrop-blur">
+          <div className="flex flex-1 max-w-md items-center gap-3 rounded-lg border border-border bg-background px-3 py-2">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
-              placeholder="Search tasks, incidents, projects, SOPs..."
+              placeholder="Search work, incidents, projects, SOPs..."
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground border border-border rounded-md px-2.5 py-1">
               <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-              All Systems Operational
+              Service Availability Normal
             </div>
             <button className="relative rounded-md p-2 hover:bg-muted text-muted-foreground">
               <Bell className="h-4 w-4" />
@@ -337,6 +354,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <main className="flex-1 overflow-y-auto">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+function PermissionDenied() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const fallbackPath = user ? landingFor(user.role) : "/login";
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-sm">
+        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-lg bg-warning/15 text-warning-foreground">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        <h1 className="mt-4 text-lg font-semibold">Permission denied</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Import Center is restricted to Shift Lead, Manager, Executive and Admin roles.
+        </p>
+        <button
+          onClick={() => navigate({ to: fallbackPath })}
+          className="mt-5 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
+        >
+          Return to my workspace
+        </button>
       </div>
     </div>
   );

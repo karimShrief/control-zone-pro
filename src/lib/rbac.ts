@@ -1,17 +1,18 @@
-import type { Role, ProjectTask, User } from "./data";
+import type { ImportType, ProjectTask, Role, User } from "./data";
 
 const ROUTE_ROLES: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/dashboard", roles: ["manager", "executive", "admin"] },
   { prefix: "/my-work", roles: ["engineer", "shift-lead"] },
   { prefix: "/tasks", roles: ["engineer", "shift-lead", "manager", "admin"] },
-  { prefix: "/incidents", roles: ["engineer", "manager", "executive", "admin"] },
-  { prefix: "/projects", roles: ["engineer", "manager", "executive", "admin"] },
+  { prefix: "/incidents", roles: ["engineer", "shift-lead", "manager", "executive", "admin"] },
+  { prefix: "/projects", roles: ["engineer", "shift-lead", "manager", "executive", "admin"] },
   { prefix: "/shifts", roles: ["engineer", "shift-lead", "manager", "executive", "admin"] },
   { prefix: "/shift-requests", roles: ["engineer", "shift-lead", "manager", "admin"] },
   { prefix: "/handover", roles: ["engineer", "shift-lead", "manager", "admin"] },
-  { prefix: "/sop", roles: ["engineer", "manager", "executive", "admin"] },
+  { prefix: "/sop", roles: ["engineer", "shift-lead", "manager", "executive", "admin"] },
+  { prefix: "/import-center", roles: ["shift-lead", "manager", "executive", "admin"] },
   { prefix: "/productivity", roles: ["manager", "executive", "admin"] },
-  { prefix: "/reports", roles: ["manager", "executive", "admin"] },
+  { prefix: "/reports", roles: ["shift-lead", "manager", "executive", "admin"] },
   { prefix: "/admin", roles: ["admin"] },
 ];
 
@@ -84,4 +85,31 @@ export function canAuditHandover(user: User | null) {
 
 export function canManageSops(user: User | null) {
   return !!user && ["manager", "admin"].includes(user.role);
+}
+
+export function canViewImportCenter(user: User | null) {
+  return !!user && ["shift-lead", "manager", "executive", "admin"].includes(user.role);
+}
+
+export function canRunImports(user: User | null) {
+  return !!user && ["shift-lead", "manager", "admin"].includes(user.role);
+}
+
+export function canImportType(user: User | null, type: ImportType) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (user.role === "manager") {
+    return [
+      "Tasks",
+      "Incidents",
+      "Projects",
+      "Project Tasks/Subtasks",
+      "Shift Roster",
+      "Handover Points",
+    ].includes(type);
+  }
+  if (user.role === "shift-lead") {
+    return ["Tasks", "Incidents", "Shift Roster", "Handover Points"].includes(type);
+  }
+  return false;
 }

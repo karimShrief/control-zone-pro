@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as HandoverRouteImport } from './routes/handover'
+import { Route as ImportCenterRouteImport } from './routes/import-center'
 import { Route as IncidentsRouteImport } from './routes/incidents'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MyWorkRouteImport } from './routes/my-work'
@@ -43,6 +44,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const HandoverRoute = HandoverRouteImport.update({
   id: '/handover',
   path: '/handover',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImportCenterRoute = ImportCenterRouteImport.update({
+  id: '/import-center',
+  path: '/import-center',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IncidentsRoute = IncidentsRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
   '/handover': typeof HandoverRoute
+  '/import-center': typeof ImportCenterRoute
   '/incidents': typeof IncidentsRoute
   '/login': typeof LoginRoute
   '/my-work': typeof MyWorkRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
   '/handover': typeof HandoverRoute
+  '/import-center': typeof ImportCenterRoute
   '/incidents': typeof IncidentsRoute
   '/login': typeof LoginRoute
   '/my-work': typeof MyWorkRoute
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
   '/handover': typeof HandoverRoute
+  '/import-center': typeof ImportCenterRoute
   '/incidents': typeof IncidentsRoute
   '/login': typeof LoginRoute
   '/my-work': typeof MyWorkRoute
@@ -160,6 +169,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/handover'
+    | '/import-center'
     | '/incidents'
     | '/login'
     | '/my-work'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/handover'
+    | '/import-center'
     | '/incidents'
     | '/login'
     | '/my-work'
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/handover'
+    | '/import-center'
     | '/incidents'
     | '/login'
     | '/my-work'
@@ -212,6 +224,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   DashboardRoute: typeof DashboardRoute
   HandoverRoute: typeof HandoverRoute
+  ImportCenterRoute: typeof ImportCenterRoute
   IncidentsRoute: typeof IncidentsRoute
   LoginRoute: typeof LoginRoute
   MyWorkRoute: typeof MyWorkRoute
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/handover'
       fullPath: '/handover'
       preLoaderRoute: typeof HandoverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/import-center': {
+      id: '/import-center'
+      path: '/import-center'
+      fullPath: '/import-center'
+      preLoaderRoute: typeof ImportCenterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/incidents': {
@@ -351,6 +371,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   DashboardRoute: DashboardRoute,
   HandoverRoute: HandoverRoute,
+  ImportCenterRoute: ImportCenterRoute,
   IncidentsRoute: IncidentsRoute,
   LoginRoute: LoginRoute,
   MyWorkRoute: MyWorkRoute,

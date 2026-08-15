@@ -1,20 +1,18 @@
 # Ops Command Platform
 
-Ops Command Platform is a React + TanStack Start operations workspace for DC, NOC, shift, incident, handover, SOP, project and admin workflows.
+Ops Command Platform is a unified operations workspace for Data Center and NOC teams to manage daily operations, incidents, projects, shifts, handovers, SOPs, productivity and governance from one configurable system.
 
-The app keeps the existing structure and uses a lightweight service layer so you can replace the starter data with your real team data or later connect a backend without rebuilding the UI.
+The product direction is Sharjah Digital Department-style operations: professional, calm, enterprise-ready, role-aware and easy for shift engineers while still giving managers and executives a strong command view.
 
-## What Is Included
+## Product Focus
 
-- Role-based login and navigation for Engineer, Shift Lead, Manager, Executive and Admin.
-- Operational pages for dashboards, tasks, incidents, projects, shift roster, shift requests, handover, SOPs, productivity and reports.
-- Admin configuration tabs for Users, Roles & Permissions, Teams, Shift Settings, Categories, Statuses and System Settings.
-- Shift Roster table with filtering, search, current-shift visibility, upcoming shifts, monthly roster building, Excel import and conflict detection.
-- Consistent page back buttons through the shared page header.
-- Light, Dark and System theme preference with readable foreground and muted text colors.
-- Audit log entries for admin changes, roster changes and shift request decisions.
+- Operational control through Command View, My Work, Shift Control, Import Center and Configuration Center.
+- Team visibility for Data Center Operations, NOC Operations, handover quality and shift coverage.
+- Accountability through ownership, status badges, SLA signals, audit logs and role restrictions.
+- Faster handover through multiple handover rows per date/shift and manager review.
+- Configurable workflows without developer changes for templates, incident rules, roster rules, SOP settings, dashboards, imports and SLA escalation.
 
-## Project Stack
+## Stack
 
 - React 19
 - TanStack Start and TanStack Router
@@ -24,7 +22,7 @@ The app keeps the existing structure and uses a lightweight service layer so you
 - Radix UI primitives
 - Lucide icons
 - Sonner notifications
-- XLSX roster import support
+- XLSX/CSV roster import support
 
 ## Install And Run
 
@@ -66,7 +64,7 @@ npm.cmd run dev
 
 ## Bootstrap Accounts
 
-Starter accounts are provided only so each role can be tested before your real user data is added.
+Starter accounts are included only so role behavior can be tested before you add real users.
 
 | Role       | Username    | Password    |
 | ---------- | ----------- | ----------- |
@@ -86,16 +84,20 @@ Primary starter data lives in:
 src/lib/data.ts
 ```
 
-Use this file to add or import your real records:
+Operational record arrays are intentionally empty so you can add your own data:
 
-- `users`: engineers, shift leads, managers, executives and admins.
-- `teamConfigs`: teams such as DC Team, NOC Team and Shared Operations.
-- `shifts`: roster rows for Morning, Evening and Night shifts.
-- `shiftTypeConfigs`: shift start/end times and minimum staffing.
-- `coverageRules`: lead and overlap rules.
-- `categoryConfigs`: task, incident, project, SOP and handover categories.
-- `statusConfigs`: status labels and badge tones.
-- `systemSettings`: app name, logo placeholder, theme preference and enabled modules.
+- `tasks`
+- `incidents`
+- `projects`
+- `projectTasks`
+- `shifts`
+- `shiftRequests`
+- `handoverPoints`
+- `sops`
+- `productivity`
+- `monthlyTrend`
+
+The app includes editable bootstrap configuration for roles, teams, categories, statuses, shift timings and workflow rules. Replace or remove those records as you load real DC/NOC data.
 
 The service layer lives in:
 
@@ -103,31 +105,81 @@ The service layer lives in:
 src/lib/services.ts
 ```
 
-That file centralizes create, update, delete/deactivate and approval actions. When you are ready for a database or API, replace the service methods there while keeping the UI routes mostly unchanged.
+When you are ready for persistence, replace repository/mock data calls with API/database calls while keeping service contracts and UI routes mostly unchanged.
 
-More setup notes are in `TEAM_DATA.md`.
+## Backend Architecture And MySQL Direction
 
-## Admin Capabilities
+The prototype remains mock/in-memory, but the future production database direction is MySQL.
 
-Admin can manage:
+Planning documents:
+
+- `ARCHITECTURE.md`: service/repository layering and MySQL migration approach.
+- `DATABASE_SCHEMA.md`: MySQL table draft and relationships.
+- `PROJECT_PLAN.md`: mock backend to MySQL migration plan.
+- `.env.example`: future `DATABASE_URL` example.
+
+No Prisma dependency was added because this project does not currently have Prisma configured. The safe next step is schema review, then adding an ORM or MySQL client after DevOps/security approval.
+
+## Configuration Center
+
+Admin manages the platform from Configuration Center:
 
 - Users: add, edit, deactivate, assign role/team and reset starter password.
 - Roles & Permissions: enable roles and configure module visibility per role.
 - Teams: add, edit, remove and assign users to teams.
-- Shift Settings: edit Morning/Evening/Night start/end times, enabled state, minimum engineers, coverage rules, monthly roster generation, roster rows and Excel roster imports.
-- Categories: add, edit and remove operational categories.
-- Statuses: add, edit and remove status labels and badge tones.
-- System Settings: app name, logo placeholder, theme preference, enabled modules and role navigation visibility.
+- Task Templates: define reusable daily operations templates, checklist and evidence needs.
+- Incident Rules: define default severity, SLA, assignment team and recommended SOPs.
+- Project Templates: define standard phases/subtasks and governance gates.
+- Shift & Roster Rules: define 3-shift timings, coverage rules, mandatory assignments, fairness guidance, roster rows, Excel import and monthly roster generation.
+- Handover Templates: define required categories, acknowledgement rules and critical next-action behavior.
+- SOP Settings: define SOP category, approval workflow, visibility and linkable modules.
+- Dashboard Settings: configure widgets per role plus app name, logo placeholder, theme and module visibility.
+- SLA & Escalation: define simple SLA thresholds and escalation owners.
+- Categories and Statuses: manage operational labels and badge colors.
+- Audit Logs: review configuration and operational change history.
 
-Admin changes write entries to Recent Admin Activity through `src/lib/audit-log.ts`.
+Every admin/configuration action writes an audit entry.
 
-## Shift Roster
+## Import Center
 
-The Shift Roster page displays:
+Import Center provides a guided mock import flow:
+
+1. Select import type.
+2. Download CSV template.
+3. Upload CSV/XLSX or use a sample file.
+4. Validate data.
+5. Review totals, warnings, errors and preview rows.
+6. Confirm import and write audit history.
+
+Supported import types:
+
+- Users
+- Tasks
+- Incidents
+- Projects
+- Project Tasks/Subtasks
+- Shift Roster
+- Shift Requests
+- Handover Points
+- SOP Metadata
+
+Role access:
+
+- Admin: full access to all import types.
+- Manager: operational imports for tasks, incidents, projects, project tasks, shift roster and handover points.
+- Shift Lead: shift and operational imports for tasks, incidents, shift roster and handover points.
+- Executive: read-only import history.
+- Engineer: no Import Center navigation or route access.
+
+Import Center is mock-based now and MySQL-ready conceptually. Future production writes should use `import_jobs`, `import_job_rows` and `audit_logs`.
+
+## Shift Control
+
+The Shift Control page uses a table-first roster layout with:
 
 - Date
 - Day
-- Shift Type
+- Shift Type: Morning, Evening, Night
 - Assigned Engineers
 - Shift Lead
 - Coverage Status
@@ -147,11 +199,15 @@ Supported roster features:
 - Manager/Admin roster edit actions.
 - Engineer shift swap, leave early, change shift and absence requests.
 
-Approved shift requests update the visible roster when applicable and create audit log entries.
+Approved shift requests update the visible roster where applicable and create audit log entries.
 
 ## Roster Excel Import
 
-Admins can import roster rows from `.xlsx` or `.csv` files in Admin Configuration > Shift Settings > Roster assignments.
+Admins can import roster rows from `.xlsx` or `.csv` files in:
+
+```text
+Configuration Center > Shift & Roster Rules > Roster assignments
+```
 
 Supported columns:
 
@@ -172,36 +228,33 @@ Default three-shift timings:
 
 ## Monthly Roster Builder
 
-Admins can generate roster rows for a full month in Admin Configuration > Shift Settings > Monthly roster builder.
+Admins can build a full month of Morning, Evening and Night roster rows in Configuration Center.
 
 The builder supports:
 
 - Month selection.
-- Morning, Evening and Night shift selection.
+- Shift selection.
 - Optional default assigned engineers.
 - Optional default shift lead.
 - Optional default note.
+- Mandatory assignment rules.
+- Fairness guidance summary.
 - Safe default behavior that skips existing rows.
-- Overwrite mode when Admin wants to replace existing rows for that month.
-
-## Handover
-
-Engineers can submit multiple handover rows for the same date and shift in one batch. Each row has its own title, category, priority, related reference, next action and notes.
-
-Managers and Admins can review handover rows and update audit status without submitting handover as a manager action.
+- Overwrite mode when replacing rows intentionally.
 
 ## Role Behavior
 
-- Engineer: view own work and own shifts, view allowed current roster, submit shift requests, no direct roster editing.
+- Engineer: lands on My Work, sees assigned/shared work and own shifts, submits handover points and shift requests, cannot edit roster directly.
 - Shift Lead: operational role with shift/team context based on configured permissions.
-- Manager: full operational visibility, coverage review and shift request approval/rejection.
-- Executive: read-only high-level summaries.
+- Manager: lands on Command View, reviews coverage, audits handover, approves/rejects shift requests and can generate roster when allowed.
+- Executive: read-only high-level operations summary.
 - Admin: full configuration and roster control.
 
-## Notes For Backend Integration
+## UI Notes
 
-- The current data layer is intentionally simple and in-memory.
-- Keep stable IDs for users, teams, shifts and operational records.
-- Use `users[].id` for owners, assignees, shift engineers and shift leads.
-- Use `teamConfigs[].id` for user team assignment.
-- Replace service methods with API calls before production persistence is required.
+- Page headers include clear titles, short descriptions and consistent back buttons.
+- Status badges use consistent meanings: green healthy/completed, yellow pending/review, red critical/breached, blue informational/in progress, gray inactive/draft.
+- Empty states are included so the app is usable while you are still loading real data.
+- Light, Dark and System theme preference are supported with foreground/muted text tokens for readable controls and tables.
+
+More setup notes are in `TEAM_DATA.md`.

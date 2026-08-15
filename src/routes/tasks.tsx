@@ -5,7 +5,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { users as appUsers, userById, type Task, type TaskType, type TaskStatus } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canEditTask, canManageTasks } from "@/lib/rbac";
-import { taskService } from "@/lib/services";
+import { configurationService, taskService } from "@/lib/services";
 import {
   Plus,
   Filter,
@@ -35,14 +35,37 @@ const TYPES: (TaskType | "All")[] = [
 function TasksPage() {
   const { user } = useAuth();
   const [rows, setRows] = useState(() => taskService.list());
+  const [templates, setTemplates] = useState(() =>
+    configurationService.listTaskTemplates().filter((template) => template.active),
+  );
+  const [selectedTemplate, setSelectedTemplate] = useState(templates[0]?.id ?? "");
   const [typeFilter, setTypeFilter] = useState<TaskType | "All">("All");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [active, setActive] = useState<Task | null>(null);
 
   const canUpdate = canManageTasks(user);
+  const canGenerateFromTemplate = ["manager", "admin"].includes(user?.role ?? "");
 
-  const refresh = () => setRows(taskService.list());
+  const refresh = () => {
+    setRows(taskService.list());
+    const activeTemplates = configurationService
+      .listTaskTemplates()
+      .filter((template) => template.active);
+    setTemplates(activeTemplates);
+    setSelectedTemplate((current) => current || activeTemplates[0]?.id || "");
+  };
+
+  const generateFromTemplate = () => {
+    if (!user || !canGenerateFromTemplate || !selectedTemplate) return;
+    const task = taskService.createFromTemplate(user.id, selectedTemplate);
+    if (!task) {
+      toast.error("Action cannot be completed. Select an active task template first.");
+      return;
+    }
+    refresh();
+    toast.success(`${task.id} generated from template`);
+  };
 
   const escalateTask = (task: Task) => {
     if (!user || !canEditTask(user, task)) return;
@@ -82,12 +105,42 @@ function TasksPage() {
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
       <PageHeader
-        title="Tasks"
-        subtitle="Daily DC operations, NOC tasks, DC tasks and general work"
+        title="Daily Operations"
+        subtitle="Track DC/NOC work, checklist evidence, ownership and SLA risk."
         actions={
-          <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
-            <Plus className="h-4 w-4" /> Add Task
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {canGenerateFromTemplate ? (
+              <>
+                <select
+                  value={selectedTemplate}
+                  onChange={(event) => setSelectedTemplate(event.target.value)}
+                  title="Choose a configured task template"
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                >
+                  {templates.length ? (
+                    templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No active templates</option>
+                  )}
+                </select>
+                <button
+                  onClick={generateFromTemplate}
+                  disabled={!selectedTemplate}
+                  title="Generate operational work from the selected Configuration Center template"
+                  className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-4 w-4" /> Generate Daily Work
+                </button>
+              </>
+            ) : null}
+            <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
+              <Plus className="h-4 w-4" /> Create Task
+            </button>
+          </div>
         }
       />
 
@@ -95,12 +148,44 @@ function TasksPage() {
         {/* Left summary */}
         <div className="col-span-12 lg:col-span-3 space-y-4">
           <div className="rounded-lg border border-border bg-card p-4">
-            <h3 className="font-semibold mb-3 text-sm">Summary</h3>
+            <h3 className="font-semibold mb-1 text-sm">Operations Summary</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Current task health across daily operations and assigned activities.
+            </p>
             <div className="space-y-2 text-sm">
               <SummaryRow label="Total" value={summary.total} />
               <SummaryRow label="Open" value={summary.open} />
               <SummaryRow label="SLA Breached" value={summary.breached} tone="critical" />
               <SummaryRow label="Blocked / Escalated" value={summary.blocked} tone="warning" />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <h3 className="font-semibold mb-1 text-sm">Template Guidance</h3>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Admin-configured templates reduce repeat typing for daily DC/NOC activities.
+            </p>
+            <div className="space-y-2">
+              {templates.slice(0, 4).map((template) => (
+                <div
+                  key={template.id}
+                  className="rounded-md border border-border bg-background p-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{template.name}</span>
+                    <StatusBadge status={template.recurrence} tone="info" />
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {template.checklist.length} checklist items
+                    {template.evidenceRequired ? " / Evidence required" : ""}
+                  </div>
+                </div>
+              ))}
+              {!templates.length ? (
+                <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-sm text-muted-foreground">
+                  No task templates configured yet.
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -160,7 +245,7 @@ function TasksPage() {
         <div className="col-span-12 lg:col-span-9 rounded-lg border border-border bg-card overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center gap-3">
             <input
-              placeholder="Search tasks…"
+              placeholder="Search tasks..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
@@ -219,14 +304,18 @@ function TasksPage() {
                     </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-0.5">
-                        <RowBtn title="Update" icon={CheckCircle2} onClick={() => setActive(t)} />
-                        <RowBtn title="Comment" icon={MessageSquare} onClick={() => setActive(t)} />
+                        <RowBtn
+                          title="Update Status"
+                          icon={CheckCircle2}
+                          onClick={() => setActive(t)}
+                        />
+                        <RowBtn
+                          title="Add Note"
+                          icon={MessageSquare}
+                          onClick={() => setActive(t)}
+                        />
                         {canEditTask(user, t) && (
-                          <RowBtn
-                            title="Attach evidence"
-                            icon={Upload}
-                            onClick={() => setActive(t)}
-                          />
+                          <RowBtn title="Add Evidence" icon={Upload} onClick={() => setActive(t)} />
                         )}
                         {["manager", "admin"].includes(user?.role ?? "") && (
                           <RowBtn
@@ -247,6 +336,16 @@ function TasksPage() {
                     </td>
                   </tr>
                 ))}
+                {!filtered.length ? (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center">
+                      <div className="text-sm font-medium">No open items found</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Adjust filters or generate daily work from a configured task template.
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

@@ -1,28 +1,110 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { userById } from "@/lib/data";
-import { projectService } from "@/lib/services";
+import { useAuth } from "@/lib/auth";
+import { canManageProjects } from "@/lib/rbac";
+import { configurationService, projectService } from "@/lib/services";
 import { Plus, FolderKanban, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/projects")({
   component: ProjectsPage,
 });
 
 function ProjectsPage() {
-  const projects = projectService.list();
+  const { user } = useAuth();
+  const [projects, setProjects] = useState(() => projectService.list());
+  const [templates, setTemplates] = useState(() =>
+    configurationService.listProjectTemplates().filter((template) => template.active),
+  );
+  const [selectedTemplate, setSelectedTemplate] = useState(templates[0]?.id ?? "");
+  const canCreateFromTemplate = canManageProjects(user);
+
+  const refresh = () => {
+    setProjects(projectService.list());
+    const activeTemplates = configurationService
+      .listProjectTemplates()
+      .filter((template) => template.active);
+    setTemplates(activeTemplates);
+    setSelectedTemplate((current) => current || activeTemplates[0]?.id || "");
+  };
+
+  const createFromTemplate = () => {
+    if (!user || !canCreateFromTemplate || !selectedTemplate) return;
+    const project = projectService.createFromTemplate(user.id, selectedTemplate);
+    if (!project) {
+      toast.error("Action cannot be completed. Select an active project template first.");
+      return;
+    }
+    refresh();
+    toast.success(`${project.name} created from template`);
+  };
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
       <PageHeader
-        title="Projects"
-        subtitle="Projects, initiatives, operational improvements and audit actions"
+        title="Projects & Readiness"
+        subtitle="Track initiatives, operational improvements, audit actions, risk and delivery progress."
         actions={
-          <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
-            <Plus className="h-4 w-4" /> New Project
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {canCreateFromTemplate ? (
+              <>
+                <select
+                  value={selectedTemplate}
+                  onChange={(event) => setSelectedTemplate(event.target.value)}
+                  title="Choose a configured project template"
+                  className="rounded-md border border-input bg-card px-3 py-2 text-sm"
+                >
+                  {templates.length ? (
+                    templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No active templates</option>
+                  )}
+                </select>
+                <button
+                  onClick={createFromTemplate}
+                  disabled={!selectedTemplate}
+                  title="Create a project with standard phases and subtasks"
+                  className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FolderKanban className="h-4 w-4" /> Use Template
+                </button>
+              </>
+            ) : null}
+            <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
+              <Plus className="h-4 w-4" /> New Project
+            </button>
+          </div>
         }
       />
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">Template-driven delivery</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Admin-defined project templates can create standard phases, owners and governance
+              checkpoints.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {templates.slice(0, 3).map((template) => (
+              <StatusBadge
+                key={template.id}
+                status={`${template.phases.length} phases`}
+                tone="info"
+              />
+            ))}
+            {!templates.length ? <StatusBadge status="No active templates" tone="neutral" /> : null}
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
         {projects.map((p) => {
@@ -71,12 +153,20 @@ function ProjectsPage() {
               <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
                 <span>Owner: {userById(p.owner).split(" ")[0]}</span>
                 <span>
-                  {subs.length} subtasks · Due {p.targetDate}
+                  {subs.length} subtasks - Due {p.targetDate}
                 </span>
               </div>
             </Link>
           );
         })}
+        {!projects.length ? (
+          <div className="md:col-span-2 xl:col-span-3 rounded-lg border border-dashed border-border bg-card px-6 py-12 text-center">
+            <div className="text-sm font-medium">No projects or readiness actions found</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Create one manually or generate a project from a configured template.
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

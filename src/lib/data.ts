@@ -254,6 +254,209 @@ export interface ShiftRequest {
 
 export const shiftRequests: ShiftRequest[] = [];
 
+export type ImportType =
+  | "Users"
+  | "Tasks"
+  | "Incidents"
+  | "Projects"
+  | "Project Tasks/Subtasks"
+  | "Shift Roster"
+  | "Shift Requests"
+  | "Handover Points"
+  | "SOP Metadata";
+
+export type ImportJobStatus = "Draft" | "Validated" | "Imported" | "Failed" | "Cancelled";
+export type ImportRowStatus = "Valid" | "Warning" | "Error";
+
+export interface ImportTemplateField {
+  name: string;
+  required: boolean;
+  example: string;
+  notes?: string;
+}
+
+export interface ImportTemplateDefinition {
+  type: ImportType;
+  description: string;
+  allowedRoles: Role[];
+  fields: ImportTemplateField[];
+  mysqlTargetTables: string[];
+}
+
+export interface ImportJob {
+  id: string;
+  importType: ImportType;
+  uploadedBy: string;
+  fileName: string;
+  totalRecords: number;
+  recordsImported: number;
+  recordsFailed: number;
+  recordsWithWarnings: number;
+  status: ImportJobStatus;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportJobRow {
+  id: string;
+  jobId: string;
+  rowNumber: number;
+  preview: Record<string, string>;
+  validationStatus: ImportRowStatus;
+  messages: string[];
+}
+
+export const importTemplateDefinitions: ImportTemplateDefinition[] = [
+  {
+    type: "Users",
+    description: "Create or update platform users, roles and team assignment.",
+    allowedRoles: ["admin"],
+    mysqlTargetTables: ["users", "user_teams"],
+    fields: [
+      { name: "name", required: true, example: "First Last" },
+      { name: "username", required: true, example: "first.last" },
+      { name: "role", required: true, example: "engineer" },
+      { name: "team", required: false, example: "DC" },
+      { name: "status", required: false, example: "Active" },
+    ],
+  },
+  {
+    type: "Tasks",
+    description: "Import Daily DC/NOC tasks and assigned operational activities.",
+    allowedRoles: ["admin", "manager", "shift-lead"],
+    mysqlTargetTables: ["tasks"],
+    fields: [
+      { name: "title", required: true, example: "Daily DC readiness check" },
+      { name: "description", required: true, example: "Validate cooling and power dashboards" },
+      { name: "type", required: true, example: "Daily DC Operation" },
+      { name: "category", required: true, example: "DC Operations" },
+      { name: "priority", required: true, example: "Medium" },
+      { name: "impact", required: true, example: "Medium" },
+      { name: "status", required: true, example: "New" },
+      { name: "assignedEngineer", required: false, example: "engineer" },
+      { name: "dueDate", required: true, example: "2026-08-15" },
+      { name: "operationType", required: false, example: "Recurring" },
+    ],
+  },
+  {
+    type: "Incidents",
+    description: "Import incidents from monitoring, handover or ITSM sources.",
+    allowedRoles: ["admin", "manager", "shift-lead"],
+    mysqlTargetTables: ["incidents", "incident_activity"],
+    fields: [
+      { name: "title", required: true, example: "Cooling alert in DC hall" },
+      { name: "description", required: true, example: "Temperature threshold exceeded" },
+      { name: "sourceType", required: true, example: "Monitoring Alert" },
+      { name: "category", required: true, example: "Cooling" },
+      { name: "subcategory", required: false, example: "CRAC alert" },
+      { name: "severity", required: true, example: "SEV-2" },
+      { name: "status", required: true, example: "Unassigned" },
+      { name: "assignee", required: false, example: "shiftlead" },
+      { name: "slaStatus", required: true, example: "On Track" },
+      { name: "createdTime", required: true, example: "2026-08-15 09:30" },
+    ],
+  },
+  {
+    type: "Projects",
+    description: "Import projects, initiatives and readiness actions.",
+    allowedRoles: ["admin", "manager"],
+    mysqlTargetTables: ["projects"],
+    fields: [
+      { name: "projectName", required: true, example: "NOC Monitoring Enhancement" },
+      { name: "description", required: true, example: "Improve alert routing and dashboards" },
+      { name: "owner", required: true, example: "manager" },
+      { name: "sponsor", required: false, example: "exec" },
+      { name: "team", required: true, example: "NOC" },
+      { name: "priority", required: true, example: "High" },
+      { name: "status", required: true, example: "Planning" },
+      { name: "startDate", required: true, example: "2026-08-01" },
+      { name: "targetDate", required: true, example: "2026-09-30" },
+      { name: "riskLevel", required: true, example: "Medium" },
+    ],
+  },
+  {
+    type: "Project Tasks/Subtasks",
+    description: "Import project subtasks, owners, dependencies and progress.",
+    allowedRoles: ["admin", "manager"],
+    mysqlTargetTables: ["project_tasks"],
+    fields: [
+      { name: "projectId", required: true, example: "PRJ-1" },
+      { name: "title", required: true, example: "Collect monitoring requirements" },
+      { name: "description", required: false, example: "Interview DC and NOC shift teams" },
+      { name: "assignee", required: false, example: "engineer" },
+      { name: "status", required: true, example: "To Do" },
+      { name: "priority", required: true, example: "Medium" },
+      { name: "dueDate", required: true, example: "2026-08-30" },
+      { name: "dependency", required: false, example: "PRJ-TASK-1" },
+      { name: "completion", required: false, example: "0" },
+    ],
+  },
+  {
+    type: "Shift Roster",
+    description: "Import Morning, Evening and Night roster assignments.",
+    allowedRoles: ["admin", "manager", "shift-lead"],
+    mysqlTargetTables: ["shift_rosters", "shift_assignments"],
+    fields: [
+      { name: "date", required: true, example: "2026-08-15" },
+      { name: "shiftType", required: true, example: "Morning" },
+      { name: "assignedEngineers", required: true, example: "engineer; shiftlead" },
+      { name: "shiftLead", required: false, example: "shiftlead" },
+      { name: "coverageStatus", required: true, example: "Covered" },
+      { name: "notes", required: false, example: "Monthly roster import" },
+    ],
+  },
+  {
+    type: "Shift Requests",
+    description: "Import shift swap, leave early, change shift and absence requests.",
+    allowedRoles: ["admin"],
+    mysqlTargetTables: ["shift_requests"],
+    fields: [
+      { name: "requester", required: true, example: "engineer" },
+      { name: "requestType", required: true, example: "Shift Swap" },
+      { name: "requestedDate", required: true, example: "2026-08-15" },
+      { name: "currentShift", required: true, example: "Morning" },
+      { name: "requestedShift", required: true, example: "Night" },
+      { name: "reason", required: true, example: "Coverage swap" },
+      { name: "status", required: true, example: "Pending" },
+    ],
+  },
+  {
+    type: "Handover Points",
+    description: "Import shift handover rows and pending follow-up points.",
+    allowedRoles: ["admin", "manager", "shift-lead"],
+    mysqlTargetTables: ["handovers", "handover_points"],
+    fields: [
+      { name: "date", required: true, example: "2026-08-15" },
+      { name: "shiftType", required: true, example: "Night" },
+      { name: "title", required: true, example: "Cooling alarm follow-up" },
+      { name: "category", required: true, example: "Incident" },
+      { name: "priority", required: true, example: "High" },
+      { name: "relatedRef", required: false, example: "INC-1" },
+      { name: "nextAction", required: true, example: "Manager review" },
+      { name: "notes", required: true, example: "Waiting facilities update" },
+    ],
+  },
+  {
+    type: "SOP Metadata",
+    description: "Import SOP document metadata, approval status and category tags.",
+    allowedRoles: ["admin"],
+    mysqlTargetTables: ["sop_documents", "sop_categories"],
+    fields: [
+      { name: "title", required: true, example: "Cooling Alert Runbook" },
+      { name: "documentType", required: true, example: "Runbook" },
+      { name: "category", required: true, example: "Cooling" },
+      { name: "tags", required: false, example: "cooling; alert; facilities" },
+      { name: "version", required: true, example: "1.0" },
+      { name: "approvalStatus", required: true, example: "Approved" },
+      { name: "lastUpdated", required: true, example: "2026-08-15" },
+    ],
+  },
+];
+
+export const importJobs: ImportJob[] = [];
+export const importJobRows: ImportJobRow[] = [];
+
 export type AdminModule =
   | "Dashboard"
   | "My Work"
@@ -264,6 +467,7 @@ export type AdminModule =
   | "Shift Requests"
   | "Handover"
   | "SOP Library"
+  | "Import Center"
   | "Productivity"
   | "Reports"
   | "Admin";
@@ -278,6 +482,7 @@ export const moduleNames: AdminModule[] = [
   "Shift Requests",
   "Handover",
   "SOP Library",
+  "Import Center",
   "Productivity",
   "Reports",
   "Admin",
@@ -329,6 +534,8 @@ export const roleConfigs: RoleConfig[] = [
       "Shift Requests",
       "Handover",
       "SOP Library",
+      "Import Center",
+      "Reports",
     ],
     permissions: ["View team work", "Coordinate shift", "Submit handover"],
   },
@@ -346,6 +553,7 @@ export const roleConfigs: RoleConfig[] = [
       "Shift Requests",
       "Handover",
       "SOP Library",
+      "Import Center",
       "Productivity",
       "Reports",
     ],
@@ -362,6 +570,7 @@ export const roleConfigs: RoleConfig[] = [
       "Projects",
       "Shift Roster",
       "SOP Library",
+      "Import Center",
       "Productivity",
       "Reports",
     ],
@@ -481,6 +690,209 @@ export const statusConfigs: StatusConfig[] = [
     module: "Handover points",
     name: "Open",
     tone: "neutral",
+    active: true,
+  },
+];
+
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  description: string;
+  type: TaskType;
+  recurrence: "Daily" | "Weekly" | "Monthly" | "On Demand";
+  ownerTeam: string;
+  checklist: string[];
+  evidenceRequired: boolean;
+  sharedDailyOperation: boolean;
+  active: boolean;
+}
+
+export const taskTemplates: TaskTemplate[] = [
+  {
+    id: "task-template-daily-dc",
+    name: "Daily DC Operations Readiness",
+    description: "Generates the standard daily operations checks for data center shift engineers.",
+    type: "Daily DC Operation",
+    recurrence: "Daily",
+    ownerTeam: "DC",
+    checklist: [
+      "Review power and cooling dashboard",
+      "Check access log exceptions",
+      "Confirm backup and monitoring alerts",
+    ],
+    evidenceRequired: true,
+    sharedDailyOperation: true,
+    active: true,
+  },
+];
+
+export interface IncidentRule {
+  id: string;
+  category: IncidentCategory;
+  defaultSeverity: Severity;
+  slaMinutes: number;
+  assignmentTeam: string;
+  recommendedSop: string;
+  escalationPath: string;
+  active: boolean;
+}
+
+export const incidentRules: IncidentRule[] = [
+  {
+    id: "incident-rule-cooling",
+    category: "Cooling",
+    defaultSeverity: "SEV-2",
+    slaMinutes: 30,
+    assignmentTeam: "DC",
+    recommendedSop: "Cooling Alert Response Runbook",
+    escalationPath: "Shift Lead -> Facilities Duty Manager",
+    active: true,
+  },
+  {
+    id: "incident-rule-network",
+    category: "Network",
+    defaultSeverity: "SEV-2",
+    slaMinutes: 45,
+    assignmentTeam: "NOC",
+    recommendedSop: "Network Service Degradation Runbook",
+    escalationPath: "NOC Lead -> Network Duty Manager",
+    active: true,
+  },
+];
+
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  description: string;
+  defaultTeam: string;
+  phases: string[];
+  governanceGate: string;
+  active: boolean;
+}
+
+export const projectTemplates: ProjectTemplate[] = [
+  {
+    id: "project-template-audit-remediation",
+    name: "Audit Remediation Action Plan",
+    description: "Creates standard phases for audit findings, remediation, validation and closure.",
+    defaultTeam: "Shared",
+    phases: ["Assess finding", "Assign remediation owner", "Collect evidence", "Management review"],
+    governanceGate: "Evidence must be approved before closure",
+    active: true,
+  },
+];
+
+export interface RosterRule {
+  id: string;
+  name: string;
+  description: string;
+  pattern: string;
+  mandatoryEngineer?: string;
+  mandatoryShift: ShiftType | "Any";
+  fairnessTarget: string;
+  active: boolean;
+}
+
+export const rosterRules: RosterRule[] = [
+  {
+    id: "roster-rule-core-coverage",
+    name: "Core 24x7 Coverage",
+    description: "Keeps all three shifts staffed and flags conflicts before roster publishing.",
+    pattern: "Morning / Evening / Night rotation with weekly review",
+    mandatoryShift: "Any",
+    fairnessTarget: "Balance night shifts and weekends across active engineers",
+    active: true,
+  },
+];
+
+export interface HandoverTemplate {
+  id: string;
+  name: string;
+  description: string;
+  requiredCategories: HandoverCategory[];
+  requiresAcknowledgement: boolean;
+  criticalRequiresNextAction: boolean;
+  active: boolean;
+}
+
+export const handoverTemplates: HandoverTemplate[] = [
+  {
+    id: "handover-template-shift-close",
+    name: "Shift Close Handover",
+    description: "Standard handover categories for DC/NOC shift closure and continuity.",
+    requiredCategories: ["Incident", "Task", "Alert", "General"],
+    requiresAcknowledgement: true,
+    criticalRequiresNextAction: true,
+    active: true,
+  },
+];
+
+export interface SopSetting {
+  id: string;
+  name: string;
+  category: string;
+  approvalWorkflow: string;
+  visibilityRule: string;
+  linkableTo: AdminModule[];
+  active: boolean;
+}
+
+export const sopSettings: SopSetting[] = [
+  {
+    id: "sop-setting-runbooks",
+    name: "Operational Runbooks",
+    category: "Runbook",
+    approvalWorkflow: "Author -> Shift Lead Review -> Manager Approval",
+    visibilityRule: "Visible to operations roles after approval",
+    linkableTo: ["Tasks", "Incidents", "Projects", "Handover"],
+    active: true,
+  },
+];
+
+export interface DashboardWidgetSetting {
+  id: string;
+  role: Role;
+  widget: string;
+  description: string;
+  enabled: boolean;
+  governanceSignal: string;
+}
+
+export const dashboardWidgetSettings: DashboardWidgetSetting[] = [
+  {
+    id: "widget-manager-command-health",
+    role: "manager",
+    widget: "Operations Health",
+    description: "Shows open work, SLA risk, critical incidents and shift coverage.",
+    enabled: true,
+    governanceSignal: "Role Restricted",
+  },
+  {
+    id: "widget-exec-monthly-trend",
+    role: "executive",
+    widget: "Monthly Trend",
+    description: "Read-only view of SLA compliance, incident trend and project progress.",
+    enabled: true,
+    governanceSignal: "Read Only",
+  },
+];
+
+export interface SlaEscalationPolicy {
+  id: string;
+  name: string;
+  appliesTo: "Tasks" | "Incidents" | "Projects" | "Handover";
+  thresholdMinutes: number;
+  escalationOwner: string;
+  active: boolean;
+}
+
+export const slaEscalationPolicies: SlaEscalationPolicy[] = [
+  {
+    id: "sla-policy-critical-incident",
+    name: "Critical Incident Escalation",
+    appliesTo: "Incidents",
+    thresholdMinutes: 30,
+    escalationOwner: "Shared",
     active: true,
   },
 ];

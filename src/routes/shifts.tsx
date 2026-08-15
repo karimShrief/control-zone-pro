@@ -185,8 +185,8 @@ function ShiftsPage() {
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-6">
       <PageHeader
-        title="Shift Roster"
-        subtitle="Review shift coverage, assigned engineers, leads, requests and roster changes."
+        title="Shift Control"
+        subtitle="Review roster coverage, assigned engineers, shift leads, requests and operational readiness."
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">

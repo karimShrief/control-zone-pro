@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { Link, createFileRoute, Navigate } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { PageHeader, KpiCard } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -74,12 +74,35 @@ function ManagerDashboard() {
     open: p.open,
     completed: p.completed,
   }));
+  const criticalItems = [
+    ...tasks
+      .filter((t) => t.sla === "Breached" || t.status === "Blocked" || t.status === "Escalated")
+      .map((t) => ({
+        kind: "Task",
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        sla: t.sla,
+        owner: userById(t.assignee),
+      })),
+    ...incidents
+      .filter((i) => i.sla !== "On Track" || i.severity === "SEV-1")
+      .map((i) => ({
+        kind: "Incident",
+        id: i.id,
+        title: i.title,
+        status: i.severity,
+        sla: i.sla,
+        owner: userById(i.assignee),
+      })),
+  ].slice(0, 6);
   const incidentByCat = ["Network", "Cooling", "Power", "Storage", "Security", "Application"].map(
     (c) => ({
       name: c,
-      value: incidents.filter((i) => i.category === c).length || 1,
+      value: incidents.filter((i) => i.category === c).length,
     }),
   );
+  const hasIncidentCategoryData = incidentByCat.some((item) => item.value > 0);
   const colors = [
     "var(--chart-1)",
     "var(--chart-2)",
@@ -91,7 +114,39 @@ function ManagerDashboard() {
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
-      <PageHeader title="Command View" subtitle="Live operations overview · DC and NOC teams" />
+      <PageHeader
+        title="Command View"
+        subtitle="Monitor team workload, incidents, projects, shift readiness, and operational risks in one view."
+      />
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr_1fr]">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Operations Health
+            </div>
+            <h2 className="mt-1 text-xl font-semibold">
+              {slaBreaches || projectsAtRisk || blocked
+                ? "Attention required before the next handover"
+                : "Operational readiness is clear"}
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Review SLA risk, critical work, roster coverage and handover quality from one command
+              workspace.
+            </p>
+          </div>
+          <CommandSignal
+            label="Service Availability"
+            value={slaBreaches ? "SLA Risk" : "Normal"}
+            tone={slaBreaches ? "critical" : "success"}
+          />
+          <CommandSignal
+            label="Governance"
+            value={handoverComplete >= 80 || !handoverPoints.length ? "Audited" : "Requires Review"}
+            tone={handoverComplete >= 80 || !handoverPoints.length ? "success" : "warning"}
+          />
+        </div>
+      </section>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
         <KpiCard label="Open Work" value={openTasks} icon={ListChecks} tone="info" />
@@ -132,35 +187,39 @@ function ManagerDashboard() {
             </div>
             <Users className="h-4 w-4 text-muted-foreground" />
           </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={workloadByEng}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={12} />
-              <YAxis stroke="var(--muted-foreground)" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                }}
-              />
-              <Legend />
-              <Bar
-                dataKey="completed"
-                stackId="a"
-                fill="var(--chart-2)"
-                name="Completed"
-                radius={[0, 0, 0, 0]}
-              />
-              <Bar
-                dataKey="open"
-                stackId="a"
-                fill="var(--chart-1)"
-                name="Open"
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          {workloadByEng.length ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={workloadByEng}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={12} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                  }}
+                />
+                <Legend />
+                <Bar
+                  dataKey="completed"
+                  stackId="a"
+                  fill="var(--chart-2)"
+                  name="Completed"
+                  radius={[0, 0, 0, 0]}
+                />
+                <Bar
+                  dataKey="open"
+                  stackId="a"
+                  fill="var(--chart-1)"
+                  name="Open"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <ChartEmptyState text="No productivity data loaded yet." />
+          )}
         </div>
 
         <div className="rounded-lg border border-border bg-card p-4">
@@ -170,29 +229,33 @@ function ManagerDashboard() {
               <p className="text-xs text-muted-foreground">Last 30 days</p>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={incidentByCat}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={50}
-                outerRadius={90}
-              >
-                {incidentByCat.map((_, i) => (
-                  <Cell key={i} fill={colors[i % colors.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
+          {hasIncidentCategoryData ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie
+                  data={incidentByCat}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={50}
+                  outerRadius={90}
+                >
+                  {incidentByCat.map((_, i) => (
+                    <Cell key={i} fill={colors[i % colors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <ChartEmptyState text="No incidents have been loaded yet." />
+          )}
         </div>
       </div>
 
@@ -203,32 +266,8 @@ function ManagerDashboard() {
             <span className="text-xs text-muted-foreground">Top breaches and blocked work</span>
           </div>
           <div className="divide-y divide-border">
-            {[
-              ...tasks
-                .filter(
-                  (t) => t.sla === "Breached" || t.status === "Blocked" || t.status === "Escalated",
-                )
-                .map((t) => ({
-                  kind: "Task",
-                  id: t.id,
-                  title: t.title,
-                  status: t.status,
-                  sla: t.sla,
-                  owner: userById(t.assignee),
-                })),
-              ...incidents
-                .filter((i) => i.sla !== "On Track" || i.severity === "SEV-1")
-                .map((i) => ({
-                  kind: "Incident",
-                  id: i.id,
-                  title: i.title,
-                  status: i.severity,
-                  sla: i.sla,
-                  owner: userById(i.assignee),
-                })),
-            ]
-              .slice(0, 6)
-              .map((item, idx) => (
+            {criticalItems.length ? (
+              criticalItems.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-3 px-4 py-3">
                   <span className="text-[11px] font-mono text-muted-foreground w-20">
                     {item.id}
@@ -241,7 +280,15 @@ function ManagerDashboard() {
                   <StatusBadge status={item.sla} />
                   <span className="text-xs text-muted-foreground w-32 truncate">{item.owner}</span>
                 </div>
-              ))}
+              ))
+            ) : (
+              <div className="px-4 py-10 text-center">
+                <div className="text-sm font-medium">No critical work needs command attention</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  SLA risks, blocked work and SEV-1 incidents will appear here.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -251,24 +298,33 @@ function ManagerDashboard() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="space-y-3">
-            {todaysShifts.map((s) => (
-              <div key={s.type} className="rounded-md border border-border p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium">{s.type} Shift</span>
-                  <StatusBadge status={s.engineers.length >= 3 ? "Approved" : "At Risk"} />
+            {todaysShifts.length ? (
+              todaysShifts.map((s) => (
+                <div key={s.type} className="rounded-md border border-border p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">{s.type} Shift</span>
+                    <StatusBadge status={s.engineers.length >= 3 ? "Approved" : "At Risk"} />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {s.engineers.map((id) => (
+                      <span
+                        key={id}
+                        className="text-xs rounded-full bg-muted px-2 py-0.5 text-muted-foreground"
+                      >
+                        {userById(id).split(" ")[0]}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {s.engineers.map((id) => (
-                    <span
-                      key={id}
-                      className="text-xs rounded-full bg-muted px-2 py-0.5 text-muted-foreground"
-                    >
-                      {userById(id).split(" ")[0]}
-                    </span>
-                  ))}
+              ))
+            ) : (
+              <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
+                <div className="text-sm font-medium">No roster published for today</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Build or import the monthly roster from the Configuration Center.
                 </div>
               </div>
-            ))}
+            )}
           </div>
           <div className="mt-4 pt-4 border-t border-border">
             <div className="flex items-center justify-between text-sm mb-2">
@@ -289,9 +345,65 @@ function ManagerDashboard() {
               </LineChart>
             </ResponsiveContainer>
           </div>
+          <div className="mt-4 border-t border-border pt-4">
+            <h3 className="mb-2 text-sm font-semibold">Quick Actions</h3>
+            <div className="grid grid-cols-1 gap-2">
+              <QuickAction to="/import-center" label="Open Import Center" />
+              <QuickAction to="/shifts" label="Review Shift Readiness" />
+              <QuickAction to="/handover" label="Audit Handover Quality" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function CommandSignal({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "success" | "warning" | "critical";
+}) {
+  const color =
+    tone === "success"
+      ? "border-success/30 bg-success/10 text-success"
+      : tone === "warning"
+        ? "border-warning/30 bg-warning/10 text-warning-foreground"
+        : "border-critical/30 bg-critical/10 text-critical";
+  return (
+    <div className={`rounded-lg border px-4 py-3 ${color}`}>
+      <div className="text-xs uppercase tracking-wider opacity-80">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function ChartEmptyState({ text }: { text: string }) {
+  return (
+    <div className="flex h-[260px] items-center justify-center rounded-md border border-dashed border-border bg-muted/20 px-4 text-center text-sm text-muted-foreground">
+      {text}
+    </div>
+  );
+}
+
+function QuickAction({
+  to,
+  label,
+}: {
+  to: "/import-center" | "/shifts" | "/handover";
+  label: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-muted"
+    >
+      {label}
+    </Link>
   );
 }
 
@@ -301,21 +413,51 @@ function ExecutiveDashboard() {
     ? Math.round(projects.reduce((a, p) => a + p.completion, 0) / projects.length)
     : 0;
   const risks = projects.filter((p) => p.risk === "High").length;
+  const hasTrend = monthlyTrend.length > 0;
+  const healthValue = hasTrend
+    ? slaCompliance >= 95 && risks === 0
+      ? "Healthy"
+      : "Needs Review"
+    : "No Data";
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto">
       <PageHeader
-        title="Executive Dashboard"
-        subtitle="High-level operations health · read-only view"
+        title="Executive Operations Summary"
+        subtitle="High-level operations health and monthly trend - read-only view"
       />
+
+      <section className="mb-6 rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Governance View
+            </div>
+            <h2 className="mt-1 text-lg font-semibold">Operational readiness without edit noise</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Executives see service health, SLA compliance, project progress and major risk only.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge status="Role Restricted" tone="info" />
+            <StatusBadge status="Audited" tone="success" />
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <KpiCard
           label="Operations Health"
-          value="Healthy"
-          tone="success"
+          value={healthValue}
+          tone={
+            healthValue === "Healthy"
+              ? "success"
+              : healthValue === "No Data"
+                ? "neutral"
+                : "warning"
+          }
           icon={Activity}
-          sub="All critical systems online"
+          sub={hasTrend ? "Based on SLA and risk signals" : "Load operational trend data"}
         />
         <KpiCard
           label="SLA Compliance"
@@ -343,62 +485,70 @@ function ExecutiveDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="font-semibold mb-1">Monthly Incident Trend</h3>
-          <p className="text-xs text-muted-foreground mb-4">Created vs Resolved · 6 months</p>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={monthlyTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
-              <YAxis stroke="var(--muted-foreground)" fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                }}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="incidents"
-                stroke="var(--chart-4)"
-                strokeWidth={2}
-                name="Created"
-              />
-              <Line
-                type="monotone"
-                dataKey="resolved"
-                stroke="var(--chart-2)"
-                strokeWidth={2}
-                name="Resolved"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <p className="text-xs text-muted-foreground mb-4">Created vs Resolved - 6 months</p>
+          {hasTrend ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={monthlyTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                  }}
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="incidents"
+                  stroke="var(--chart-4)"
+                  strokeWidth={2}
+                  name="Created"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="resolved"
+                  stroke="var(--chart-2)"
+                  strokeWidth={2}
+                  name="Resolved"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <ChartEmptyState text="No monthly incident trend data loaded yet." />
+          )}
         </div>
 
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="font-semibold mb-1">SLA Compliance Trend</h3>
           <p className="text-xs text-muted-foreground mb-4">Target: 95%</p>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={monthlyTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
-              <YAxis stroke="var(--muted-foreground)" fontSize={12} domain={[80, 100]} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="sla"
-                stroke="var(--chart-1)"
-                strokeWidth={3}
-                name="SLA %"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {hasTrend ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={monthlyTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={12} domain={[80, 100]} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--popover)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="sla"
+                  stroke="var(--chart-1)"
+                  strokeWidth={3}
+                  name="SLA %"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <ChartEmptyState text="No SLA trend data loaded yet." />
+          )}
         </div>
       </div>
 
@@ -412,7 +562,7 @@ function ExecutiveDashboard() {
               <div className="col-span-5">
                 <div className="text-sm font-medium">{p.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {p.type} · {p.team}
+                  {p.type} - {p.team}
                 </div>
               </div>
               <div className="col-span-2">
@@ -429,6 +579,14 @@ function ExecutiveDashboard() {
               <div className="col-span-1 text-right text-sm font-medium">{p.completion}%</div>
             </div>
           ))}
+          {!projects.length ? (
+            <div className="px-4 py-10 text-center">
+              <div className="text-sm font-medium">No portfolio data loaded yet</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Project summaries will appear here after real project data is added.
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

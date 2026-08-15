@@ -1,84 +1,26 @@
 # Team Data Setup
 
-The app is now wired to a neutral starter data module that you can replace with your real team data.
+The app is ready for your real Data Center and NOC team data. Operational records are intentionally empty; bootstrap users and editable configuration exist only so you can test roles and configure the system before connecting a backend.
 
-## Where to add your team data
+## Main File
 
-Edit `src/lib/data.ts`.
+Edit:
 
-Start with these exports:
+```text
+src/lib/data.ts
+```
 
-- `users`: your engineers, shift leads, managers, executives and admins.
-- `teamConfigs`: your real team names and descriptions.
-- `shifts`: published roster rows.
-- `shiftTypeConfigs`: shift names, start/end times and minimum coverage.
-- `coverageRules`: default coverage rules.
-- `categoryConfigs`: categories for tasks, incidents, projects, SOPs and handover.
-- `statusConfigs`: status labels and badge tones.
-- `systemSettings`: app name, enabled modules and navigation visibility.
+Use stable IDs because records reference each other by ID.
 
-Operational record arrays are intentionally empty:
+## People And Teams
 
-- `tasks`
-- `incidents`
-- `projects`
-- `projectTasks`
-- `shiftRequests`
-- `handoverPoints`
-- `sops`
-- `productivity`
-- `monthlyTrend`
+Start with:
 
-Fill those arrays from your own source, or replace the service methods in `src/lib/services.ts`
-with API calls later.
+- `users`: engineers, shift leads, managers, executives and admins.
+- `teamConfigs`: teams such as DC Team, NOC Team and Shared Operations.
+- `roleConfigs`: module access per role.
 
-## Shift roster import
-
-Admin can import `.xlsx` or `.csv` roster files from Admin Configuration > Shift Settings.
-
-Use these columns:
-
-- `Date`
-- `Shift Type`
-- `Assigned Engineers`
-- `Shift Lead`
-- `Coverage Status`
-- `Notes`
-
-Use `Morning`, `Evening` or `Night` as shift types. The importer matches people by `users[].id`,
-`users[].username` or `users[].name`.
-
-## Monthly roster builder
-
-Admin can also build a full month of roster rows from Admin Configuration > Shift Settings.
-
-The builder creates rows for the selected month and selected shifts. By default it skips existing
-rows, so it is safe to use after manual edits. Enable overwrite only when you intentionally want to
-replace existing rows for that month.
-
-## Bootstrap logins
-
-The app includes neutral bootstrap users so you can test role access:
-
-- `engineer`
-- `shiftlead`
-- `manager`
-- `exec`
-- `admin`
-
-Starter password: `change-me`
-
-Replace these accounts before production use.
-
-## ID references
-
-Use stable IDs consistently:
-
-- Assign task, incident, project, shift and handover owners using `users[].id`.
-- Assign users to teams using `teamConfigs[].id`.
-- Assign shift engineers using `users[].id`.
-
-Example:
+Example user:
 
 ```ts
 {
@@ -91,3 +33,150 @@ Example:
   status: "Active",
 }
 ```
+
+## Operational Records
+
+These arrays are ready for your real records:
+
+- `tasks`
+- `incidents`
+- `projects`
+- `projectTasks`
+- `shifts`
+- `shiftRequests`
+- `handoverPoints`
+- `sops`
+- `productivity`
+- `monthlyTrend`
+- `importJobs`
+- `importJobRows`
+
+You can fill them directly during early testing or replace the service methods in `src/lib/services.ts` with API calls later.
+
+## Configuration Records
+
+Admins can edit these through Configuration Center:
+
+- `taskTemplates`: recurring Daily DC/NOC work templates, checklist and evidence rules.
+- `incidentRules`: category-based severity, SLA, assignment team and recommended SOP rules.
+- `projectTemplates`: standard project phases/subtasks and governance gates.
+- `rosterRules`: work/off pattern, mandatory engineer/shift and fairness guidance.
+- `handoverTemplates`: required categories, acknowledgement and critical next-action rules.
+- `sopSettings`: SOP approval workflow, visibility and linkable modules.
+- `dashboardWidgetSettings`: role-specific widget visibility and governance indicators.
+- `slaEscalationPolicies`: threshold minutes and escalation owners.
+- `importTemplateDefinitions`: CSV/XLSX-style import templates and role access.
+- `categoryConfigs`: task, incident, project, SOP and handover categories.
+- `statusConfigs`: status labels and badge tones.
+- `systemSettings`: app name, logo placeholder, theme preference and enabled modules.
+
+Generic starter configuration can be replaced or removed. It is not production team data.
+
+## Shift Timings
+
+Configure the three shifts in `shiftTypeConfigs` or through Configuration Center:
+
+- Morning
+- Evening
+- Night
+
+Each shift type supports:
+
+- Start time
+- End time
+- Required minimum engineers
+- Enabled/disabled state
+
+Coverage rules live in `coverageRules`:
+
+- Require shift lead
+- Prevent overlapping assignments
+- Default minimum engineers
+
+## Roster Excel Import
+
+Admins can import `.xlsx` or `.csv` roster files from:
+
+```text
+Configuration Center > Shift & Roster Rules > Roster assignments
+```
+
+Supported columns:
+
+- `Date`
+- `Shift Type`
+- `Assigned Engineers`
+- `Shift Lead`
+- `Coverage Status`
+- `Notes`
+
+Use `Morning`, `Evening` or `Night` as shift types. People can be matched by:
+
+- `users[].id`
+- `users[].username`
+- `users[].name`
+
+Separate multiple assigned engineers with commas, semicolons or line breaks.
+
+## Import Center Templates
+
+Import Center supports mock templates for:
+
+- Users
+- Tasks
+- Incidents
+- Projects
+- Project Tasks/Subtasks
+- Shift Roster
+- Shift Requests
+- Handover Points
+- SOP Metadata
+
+Templates are defined in `importTemplateDefinitions`. The current mock flow validates sample rows and records import history. Future MySQL implementation should write import batches to `import_jobs` and row results to `import_job_rows`.
+
+## Monthly Roster Builder
+
+Admins can build roster rows across a month from:
+
+```text
+Configuration Center > Shift & Roster Rules > Monthly roster builder
+```
+
+The builder can:
+
+- Create Morning/Evening/Night rows for the selected month.
+- Skip existing rows by default.
+- Overwrite rows only when explicitly enabled.
+- Apply active mandatory assignment rules.
+- Return a fairness summary for review before publishing.
+
+## Shift Requests
+
+Engineers and shift leads can submit:
+
+- Shift swap
+- Leave early
+- Change shift
+- Absence note
+
+Managers/Admins can approve or reject. Approved swap/change requests update the roster where applicable and create audit entries.
+
+## Service Layer
+
+Business behavior is centralized in:
+
+```text
+src/lib/services.ts
+```
+
+Replace the in-memory arrays with API/database calls here when you are ready for persistence. Keep route/component contracts stable where possible.
+
+## Audit Log
+
+Audit logging lives in:
+
+```text
+src/lib/audit-log.ts
+```
+
+Configuration changes, roster modifications, generated template work, handover audit updates and shift request decisions write audit entries.
