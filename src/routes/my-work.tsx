@@ -161,7 +161,9 @@ function MyWork() {
                       title="Prototype only: claim action is not available in mock mode."
                       aria-label="Take unassigned item is unavailable in this prototype"
                       onClick={() =>
-                        toast.info("Claiming an unassigned item is not available in this prototype.")
+                        toast.info(
+                          "Claiming an unassigned item is not available in this prototype.",
+                        )
                       }
                       className="cursor-not-allowed rounded border border-border px-2 py-0.5 text-xs opacity-60"
                     >
