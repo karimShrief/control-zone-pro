@@ -921,6 +921,17 @@ export const systemSettings: SystemSettings = {
 export type HandoverCategory =
   "Incident" | "Task" | "Project" | "Maintenance" | "Alert" | "Access" | "General";
 
+export interface HandoverComment {
+  id: string;
+  handoverId: string;
+  handoverPointId?: string;
+  commentText: string;
+  createdBy: string;
+  createdAt: string;
+  role: Role;
+  visibility?: "Team" | "Manager Only" | "Admin Only";
+}
+
 export interface HandoverPoint {
   id: string;
   date: string;
@@ -939,6 +950,7 @@ export interface HandoverPoint {
 }
 
 export const handoverPoints: HandoverPoint[] = [];
+export const handoverComments: HandoverComment[] = [];
 
 export interface SOP {
   id: string;

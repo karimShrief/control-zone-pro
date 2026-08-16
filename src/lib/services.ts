@@ -31,6 +31,7 @@ import {
   type Role,
   type RoleConfig,
   type Shift,
+  type HandoverComment,
   type HandoverPoint,
   type HandoverTemplate,
   type ImportJob,
@@ -1798,6 +1799,36 @@ export const shiftRequestService = {
 
 export const handoverService = {
   list: () => [...handoverPoints],
+  listComments: (handoverId: string) =>
+    [...handoverComments]
+      .filter((comment) => comment.handoverId === handoverId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  addComment: (
+    actorId: string,
+    handoverId: string,
+    input: Pick<HandoverComment, "commentText" | "handoverPointId" | "visibility">,
+  ) => {
+    const actor = users.find((user) => user.id === actorId);
+    const comment: HandoverComment = {
+      id: `HC-${handoverComments.length + 1}`,
+      handoverId,
+      handoverPointId: input.handoverPointId,
+      commentText: input.commentText.trim(),
+      createdBy: actorId,
+      createdAt: new Date().toISOString(),
+      role: actor?.role ?? "engineer",
+      visibility: input.visibility ?? "Team",
+    };
+    handoverComments.unshift(comment);
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "handover.comment.added",
+      entityType: "handover",
+      entityId: handoverId,
+      after: { commentId: comment.id, commentText: comment.commentText, createdBy: actorId },
+    });
+    return comment;
+  },
   create: (
     actorId: string,
     shiftOrInput:

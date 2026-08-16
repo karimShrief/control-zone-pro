@@ -56,7 +56,11 @@ export function canEditProjectTask(user: User | null, task: Pick<ProjectTask, "a
 }
 
 export function canSubmitHandover(user: User | null) {
-  return !!user && user.role === "engineer";
+  return !!user && ["engineer", "admin"].includes(user.role);
+}
+
+export function canCommentOnHandover(user: User | null) {
+  return !!user && ["engineer", "shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canCreateIncidents(user: User | null) {
@@ -80,7 +84,7 @@ export function canManageRoster(user: User | null) {
 }
 
 export function canAuditHandover(user: User | null) {
-  return !!user && ["manager", "admin"].includes(user.role);
+  return !!user && ["shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canManageSops(user: User | null) {
