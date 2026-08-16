@@ -1378,11 +1378,21 @@ function AdminPage() {
                       themePreference: value as SystemSettings["themePreference"],
                     })
                   }
-                  options={["System", "Light", "Dark"].map((item) => ({
+                  options={["Light", "Dark"].map((item) => ({
                     value: item,
                     label: item,
                   }))}
                 />
+              </div>
+              <div className="rounded-lg border border-border bg-primary/5 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-primary/80">
+                  Current Data Mode
+                </div>
+                <div className="mt-2 text-2xl font-semibold text-primary">Mock Mode</div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  This prototype is currently running in Mock Mode. MySQL readiness is prepared for
+                  future backend integration.
+                </p>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">
                 <h3 className="text-sm font-semibold">Enabled modules</h3>

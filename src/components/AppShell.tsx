@@ -149,7 +149,7 @@ const NAV: NavItem[] = [
 ];
 
 const THEME_EVENT = "ops-system-settings-changed";
-const THEME_OPTIONS: SystemSettings["themePreference"][] = ["System", "Light", "Dark"];
+const THEME_OPTIONS: SystemSettings["themePreference"][] = ["Light", "Dark"];
 
 function isDarkPreference(theme: SystemSettings["themePreference"]) {
   if (theme === "Dark") return true;

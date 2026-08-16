@@ -24,14 +24,7 @@ export const Route = createFileRoute("/import-center")({
   component: ImportCenterPage,
 });
 
-const STEPS = [
-  "Select Import Type",
-  "Download Template",
-  "Upload File",
-  "Validate Data",
-  "Review & Confirm",
-  "Import Complete",
-];
+const STEPS = ["Select Data Type", "Upload or Paste Data", "Validate & Preview", "Confirm Import"];
 
 function ImportCenterPage() {
   const { user } = useAuth();
@@ -48,6 +41,8 @@ function ImportCenterPage() {
   const [activeJob, setActiveJob] = useState<ImportJob | null>(null);
   const [rows, setRows] = useState<ImportJobRow[]>([]);
   const [detailJob, setDetailJob] = useState<ImportJob | null>(null);
+  const [pastedCsv, setPastedCsv] = useState("");
+  const [importStatus, setImportStatus] = useState<string>("");
 
   if (!user) return <Navigate to="/login" />;
   if (!canViewImportCenter(user)) return <PermissionDenied />;
@@ -72,7 +67,8 @@ function ImportCenterPage() {
     const csv = importService.downloadTemplate(user.id, selectedTemplate.type);
     downloadTextFile(csv, `${fileSlug(selectedTemplate.type)}-template.csv`);
     refresh();
-    setStep(3);
+    setImportStatus("Template downloaded. You can now upload or paste data.");
+    setStep(2);
     toast.success("Template downloaded");
   };
 
@@ -84,8 +80,26 @@ function ImportCenterPage() {
       return;
     }
     refresh(job);
-    setStep(4);
+    setImportStatus(`Loaded ${fileName} for ${selectedType}.`);
+    setStep(3);
     toast.success("Mock file uploaded");
+  };
+
+  const loadPastedCsv = () => {
+    if (!canRun || !selectedTemplate || !pastedCsv.trim()) {
+      toast.error("Paste CSV content before continuing.");
+      return;
+    }
+    const job = importService.uploadFile(
+      user.id,
+      selectedTemplate.type,
+      `${selectedType.toLowerCase()}-paste.csv`,
+    );
+    if (!job) return;
+    refresh(job);
+    setImportStatus("CSV pasted and preview generated.");
+    setStep(3);
+    toast.success("Pasted CSV loaded");
   };
 
   const validateJob = () => {
@@ -93,7 +107,7 @@ function ImportCenterPage() {
     const job = importService.validate(user.id, activeJob.id);
     if (!job) return;
     refresh(job);
-    setStep(5);
+    setStep(4);
     toast.success("Validation completed");
   };
 
@@ -102,7 +116,7 @@ function ImportCenterPage() {
     const job = importService.confirm(user.id, activeJob.id);
     if (!job) return;
     refresh(job);
-    setStep(6);
+    setImportStatus(job.status === "Imported" ? "Import complete." : "Import failed.");
     toast.success(job.status === "Imported" ? "Import complete" : "Import failed");
   };
 
@@ -186,9 +200,9 @@ function ImportCenterPage() {
             <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <div className="flex flex-col gap-2 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">Step 1: Select import type</h2>
+                  <h2 className="text-sm font-semibold">Step 1: Select data type</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Role-restricted cards make it clear what this user can import.
+                    Choose the source data set for this import.
                   </p>
                 </div>
                 <StatusBadge status={roleAccessLabel(user.role)} tone="info" />
@@ -203,7 +217,7 @@ function ImportCenterPage() {
                       disabled={!allowed}
                       onClick={() => {
                         setSelectedType(template.type);
-                        setStep(Math.max(step, 2));
+                        setStep(2);
                       }}
                       className={`rounded-lg border p-3 text-left transition ${
                         selectedType === template.type
@@ -228,40 +242,24 @@ function ImportCenterPage() {
             <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold">Step 2: Download template</h2>
+                  <h2 className="text-sm font-semibold">Step 2: Upload or paste data</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Template fields match the future MySQL target tables.
+                    Download a template, upload a file, or paste CSV content directly.
                   </p>
                 </div>
                 <button
                   onClick={downloadTemplate}
                   disabled={!canRun}
-                  title="Download a mock CSV template for the selected import type"
                   className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Download className="h-4 w-4" /> Download Template
                 </button>
               </div>
               {selectedTemplate ? <TemplateFields template={selectedTemplate} /> : null}
-            </section>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-            <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-              <h2 className="text-sm font-semibold">Step 3: Upload file</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Upload CSV/XLSX or use the sample file to simulate validation.
-              </p>
-              <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/20 p-5 text-center">
-                <Upload className="mx-auto h-7 w-7 text-muted-foreground" />
-                <div className="mt-2 text-sm font-medium">Drop-zone prototype</div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  File parsing is mocked for now; validation rows are generated from the selected
-                  template.
-                </p>
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/20 p-4">
+                <div className="flex flex-wrap gap-2">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted">
-                    <Upload className="h-4 w-4" /> Upload CSV/XLSX
+                    <Upload className="h-4 w-4" /> Upload file
                     <input
                       type="file"
                       accept=".csv,.xlsx"
@@ -277,30 +275,79 @@ function ImportCenterPage() {
                   <button
                     onClick={() => uploadFile(`${fileSlug(selectedType)}-sample.csv`)}
                     disabled={!canRun}
-                    className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 text-sm text-primary hover:bg-secondary/80 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <FileText className="h-4 w-4" /> Use Sample File
+                    <FileText className="h-4 w-4" /> Use sample file
                   </button>
                 </div>
+                <textarea
+                  value={pastedCsv}
+                  onChange={(event) => setPastedCsv(event.target.value)}
+                  rows={6}
+                  placeholder="Paste CSV here: name,username,role\nJane Doe,jane,engineer"
+                  className="mt-3 w-full rounded-md border border-input bg-card px-3 py-2 text-sm resize-none"
+                />
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={loadPastedCsv}
+                    disabled={!canRun}
+                    className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Load pasted data
+                  </button>
+                </div>
+              </div>
+              {importStatus ? (
+                <div className="mt-3 text-sm text-muted-foreground">{importStatus}</div>
+              ) : null}
+            </section>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+            <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              <h2 className="text-sm font-semibold">Step 3: Validate & preview</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Review row quality, warnings and error counts before import confirmation.
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+                <Metric label="Total" value={summary.total} />
+                <Metric label="Valid" value={summary.valid} tone="success" />
+                <Metric label="Warnings" value={summary.warnings} tone="warning" />
+                <Metric label="Errors" value={summary.errors} tone="critical" />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={validateJob}
+                  disabled={!activeJob || activeJob.status === "Imported"}
+                  className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-4 w-4" /> Validate data
+                </button>
+                <button
+                  onClick={() => setStep(4)}
+                  disabled={!activeJob}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Review & confirm
+                </button>
               </div>
             </section>
 
             <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
               <div className="flex flex-col gap-3 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">Steps 4-5: Validate and review</h2>
+                  <h2 className="text-sm font-semibold">Step 4: Confirm import</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Required fields, unknown engineers, dates, duplicate rows, status and priority
-                    are checked.
+                    Complete the import and record audit history.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={validateJob}
+                    onClick={cancelJob}
                     disabled={!activeJob || activeJob.status === "Imported"}
                     className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <CheckCircle2 className="h-4 w-4" /> Validate Data
+                    <XCircle className="h-4 w-4" /> Cancel
                   </button>
                   <button
                     onClick={confirmJob}
@@ -313,26 +360,13 @@ function ImportCenterPage() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
-                <Metric label="Total" value={summary.total} />
-                <Metric label="Valid" value={summary.valid} tone="success" />
+                <Metric label="Total rows" value={summary.total} />
+                <Metric label="Valid rows" value={summary.valid} tone="success" />
+                <Metric label="Error rows" value={summary.errors} tone="critical" />
                 <Metric label="Warnings" value={summary.warnings} tone="warning" />
-                <Metric label="Errors" value={summary.errors} tone="critical" />
               </div>
 
               <PreviewTable rows={rows} />
-
-              {activeJob ? (
-                <div className="mt-4 flex flex-wrap justify-end gap-2">
-                  <button
-                    onClick={cancelJob}
-                    disabled={activeJob.status === "Imported" || activeJob.status === "Cancelled"}
-                    className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <XCircle className="h-4 w-4" /> Cancel Import
-                  </button>
-                  {step === 6 ? <StatusBadge status="Import Complete" tone="success" /> : null}
-                </div>
-              ) : null}
             </section>
           </div>
         </>

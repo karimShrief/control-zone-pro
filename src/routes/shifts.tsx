@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PageHeader, KpiCard } from "@/components/AppShell";
 import { ShiftClockCard } from "@/components/ShiftClockCard";
@@ -25,10 +25,15 @@ import {
   Moon,
   Repeat,
   Search,
+  Settings,
   Sun,
   Sunset,
   UserMinus,
   UserPlus,
+  Wand2,
+  ClipboardCheck,
+  Database,
+  PlusCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -55,6 +60,7 @@ const REQUEST_TYPES: ShiftRequest["type"][] = [
 
 function ShiftsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { rosterFor } = useShiftClock();
   const today = new Date().toISOString().slice(0, 10);
   const shiftTypes = shiftService.listShiftTypes().filter((shiftType) => shiftType.enabled);
@@ -79,9 +85,26 @@ function ShiftsPage() {
     shiftTypes[1]?.name ?? "Evening",
   );
   const [requestReason, setRequestReason] = useState("");
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [generatedRoster, setGeneratedRoster] = useState<Shift[]>([]);
+  const [builderForm, setBuilderForm] = useState({
+    startDate: today,
+    endDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
+    selectedEngineers: activeEngineers.slice(0, 3).map((engineer) => engineer.id),
+    morningMinimum: 2,
+    eveningMinimum: 2,
+    nightMinimum: 2,
+    workDays: 6,
+    offDays: 2,
+    mandatoryEngineer: "u1",
+    mandatoryRuleType: "Must be scheduled",
+    mandatoryShift: "Morning" as ShiftType,
+    reason: "Karim must be Morning shift.",
+  });
 
   const canEditRoster = canManageRoster(user);
   const canSubmitRequest = canSubmitShiftRequests(user);
+  const canGenerateRoster = user ? ["manager", "admin"].includes(user.role) : false;
   const currentShiftType = shiftService.currentShiftType();
   const currentShift = rows.find(
     (shift) => shift.date === today && shift.type === currentShiftType,
@@ -116,6 +139,80 @@ function ShiftsPage() {
   ).length;
 
   const refresh = () => setRows(shiftService.listSchedule());
+
+  const buildRosterPreview = () => {
+    const start = new Date(`${builderForm.startDate}T00:00:00`);
+    const end = new Date(`${builderForm.endDate}T00:00:00`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      toast.error("Select a valid date range before generating the roster.");
+      return;
+    }
+
+    const selected = builderForm.selectedEngineers.length
+      ? builderForm.selectedEngineers
+      : activeEngineers.map((engineer) => engineer.id);
+    const preview: Shift[] = [];
+    const cursor = new Date(start);
+
+    while (cursor <= end) {
+      const date = cursor.toISOString().slice(0, 10);
+      (["Morning", "Evening", "Night"] as ShiftType[]).forEach((shiftType, index) => {
+        const minimum =
+          shiftType === "Morning"
+            ? builderForm.morningMinimum
+            : shiftType === "Evening"
+              ? builderForm.eveningMinimum
+              : builderForm.nightMinimum;
+
+        let engineers = [...selected];
+        if (index === 0) {
+          engineers = selected.slice(0, Math.max(minimum, 1));
+        } else if (index === 1) {
+          engineers = selected.slice(1, Math.min(selected.length, Math.max(minimum, 1) + 1));
+        } else {
+          engineers = selected.slice(2, Math.min(selected.length, Math.max(minimum, 1) + 2));
+        }
+
+        if (
+          builderForm.mandatoryEngineer &&
+          (builderForm.mandatoryShift === "Any" || builderForm.mandatoryShift === shiftType)
+        ) {
+          if (!engineers.includes(builderForm.mandatoryEngineer)) {
+            engineers = [builderForm.mandatoryEngineer, ...engineers];
+          }
+        }
+        engineers = Array.from(new Set(engineers)).slice(
+          0,
+          Math.max(minimum + 1, engineers.length),
+        );
+        const coverageStatus = engineers.length >= minimum ? "Covered" : "Understaffed";
+        const shift: Shift = {
+          date,
+          type: shiftType,
+          engineers,
+          shiftLead: engineers[0] || builderForm.mandatoryEngineer || undefined,
+          coverageStatus,
+          notes: builderForm.reason || "Generated schedule preview",
+        };
+        preview.push(shift);
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    setGeneratedRoster(preview);
+    setBuilderOpen(false);
+    toast.success(`Roster preview generated for ${preview.length} shifts.`);
+  };
+
+  const publishGeneratedRoster = () => {
+    if (!user || !generatedRoster.length) {
+      toast.error("Generate a roster preview before publishing.");
+      return;
+    }
+    shiftService.importShifts(user.id, generatedRoster);
+    setRows(shiftService.listSchedule());
+    toast.success("Generated roster published to the live shift board.");
+  };
 
   const openEditor = (shift: Shift, mode: EditorMode) => {
     const availableEngineer =
@@ -188,6 +285,54 @@ function ShiftsPage() {
         title="Shift Control"
         subtitle="Review roster coverage, assigned engineers, shift leads, requests and operational readiness."
       />
+
+      {canGenerateRoster ? (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.2em] text-primary/80">
+                Schedule Builder
+              </div>
+              <h2 className="mt-1 text-lg font-semibold text-foreground">Shift Roster</h2>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setBuilderOpen(true)}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                <Wand2 className="h-4 w-4" /> Generate Roster
+              </button>
+              <button
+                onClick={() => {
+                  const shift = rows[0] ?? shiftService.listSchedule()[0];
+                  if (shift) openEditor(shift, "add");
+                }}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-primary hover:bg-secondary/80"
+              >
+                <PlusCircle className="h-4 w-4" /> Add Shift Manually
+              </button>
+              <button
+                onClick={() => navigate({ to: "/import-center" })}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              >
+                <Database className="h-4 w-4" /> Import Roster
+              </button>
+              <button
+                onClick={publishGeneratedRoster}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-primary hover:bg-secondary/80"
+              >
+                <ClipboardCheck className="h-4 w-4" /> Publish Roster
+              </button>
+              <button
+                onClick={() => navigate({ to: "/admin" })}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              >
+                <Settings className="h-4 w-4" /> Shift Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
         {user?.role === "engineer" || user?.role === "shift-lead" ? <ShiftClockCard /> : null}
@@ -287,6 +432,125 @@ function ShiftsPage() {
           </div>
         </div>
       </section>
+
+      {generatedRoster.length ? (
+        <section className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="border-b border-border p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold">Generated roster preview</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Draft rows ready to review and publish.
+                </p>
+              </div>
+              <StatusBadge status="Preview Ready" tone="info" />
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/30">
+                  <th className="px-4 py-2.5">Date</th>
+                  <th className="px-4 py-2.5">Day</th>
+                  <th className="px-4 py-2.5">Morning</th>
+                  <th className="px-4 py-2.5">Evening</th>
+                  <th className="px-4 py-2.5">Night</th>
+                  <th className="px-4 py-2.5">Off Engineers</th>
+                  <th className="px-4 py-2.5">Coverage Status</th>
+                  <th className="px-4 py-2.5">Warnings</th>
+                  <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {Array.from(new Set(generatedRoster.map((shift) => shift.date))).map((date) => {
+                  const byDate = generatedRoster.filter((shift) => shift.date === date);
+                  const allAssigned = Array.from(
+                    new Set(byDate.flatMap((shift) => shift.engineers)),
+                  );
+                  const offEngineers = activeEngineers
+                    .filter((engineer) => !allAssigned.includes(engineer.id))
+                    .map((engineer) => engineer.name);
+                  const coverageStatus = byDate.some(
+                    (shift) => shift.coverageStatus === "Understaffed",
+                  )
+                    ? "Understaffed"
+                    : "Covered";
+                  const warnings = byDate.flatMap((shift) => {
+                    const list: string[] = [];
+                    if (
+                      shift.engineers.length <
+                      (shift.type === "Morning"
+                        ? builderForm.morningMinimum
+                        : shift.type === "Evening"
+                          ? builderForm.eveningMinimum
+                          : builderForm.nightMinimum)
+                    ) {
+                      list.push(`${shift.type} below minimum`);
+                    }
+                    if (
+                      builderForm.mandatoryEngineer &&
+                      !shift.engineers.includes(builderForm.mandatoryEngineer) &&
+                      (builderForm.mandatoryShift === "Any" ||
+                        builderForm.mandatoryShift === shift.type)
+                    ) {
+                      list.push(`${userById(builderForm.mandatoryEngineer)} missing`);
+                    }
+                    return list;
+                  });
+                  return (
+                    <tr key={date} className="hover:bg-muted/30">
+                      <td className="px-4 py-3 font-medium">{date}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{dayName(date)}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {byDate
+                          .find((shift) => shift.type === "Morning")
+                          ?.engineers.map((id) => userById(id))
+                          .join(", ") || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {byDate
+                          .find((shift) => shift.type === "Evening")
+                          ?.engineers.map((id) => userById(id))
+                          .join(", ") || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {byDate
+                          .find((shift) => shift.type === "Night")
+                          ?.engineers.map((id) => userById(id))
+                          .join(", ") || "-"}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {offEngineers.slice(0, 4).join(", ") || "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={coverageStatus} />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {warnings.join("; ") || "No warnings"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge
+                          status={coverageStatus === "Covered" ? "Published" : "Pending"}
+                          tone={coverageStatus === "Covered" ? "success" : "warning"}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => publishGeneratedRoster()}
+                          className="rounded-md border border-border bg-secondary px-2 py-1 text-xs font-medium text-primary hover:bg-secondary/80"
+                        >
+                          Publish
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-lg border border-border bg-card overflow-hidden">
         <div className="border-b border-border p-4 space-y-3">
@@ -519,6 +783,220 @@ function ShiftsPage() {
           </table>
         </div>
       </section>
+
+      <Dialog open={builderOpen} onOpenChange={(open) => !open && setBuilderOpen(false)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Generate Roster</DialogTitle>
+            <DialogDescription>
+              Create a draft roster with mandatory engineer coverage, workday rules and minimum
+              staffing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Start date
+              </span>
+              <input
+                type="date"
+                value={builderForm.startDate}
+                onChange={(event) =>
+                  setBuilderForm({ ...builderForm, startDate: event.target.value })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                End date
+              </span>
+              <input
+                type="date"
+                value={builderForm.endDate}
+                onChange={(event) =>
+                  setBuilderForm({ ...builderForm, endDate: event.target.value })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Selected engineers
+              </span>
+              <select
+                multiple
+                value={builderForm.selectedEngineers}
+                onChange={(event) => {
+                  const values = Array.from(event.target.selectedOptions, (option) => option.value);
+                  setBuilderForm({ ...builderForm, selectedEngineers: values });
+                }}
+                className="mt-1.5 h-28 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              >
+                {activeEngineers.map((engineer) => (
+                  <option key={engineer.id} value={engineer.id}>
+                    {engineer.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Morning minimum
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={builderForm.morningMinimum}
+                onChange={(event) =>
+                  setBuilderForm({
+                    ...builderForm,
+                    morningMinimum: Number(event.target.value) || 1,
+                  })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Evening minimum
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={builderForm.eveningMinimum}
+                onChange={(event) =>
+                  setBuilderForm({
+                    ...builderForm,
+                    eveningMinimum: Number(event.target.value) || 1,
+                  })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Night minimum
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={builderForm.nightMinimum}
+                onChange={(event) =>
+                  setBuilderForm({ ...builderForm, nightMinimum: Number(event.target.value) || 1 })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Work days
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={builderForm.workDays}
+                onChange={(event) =>
+                  setBuilderForm({ ...builderForm, workDays: Number(event.target.value) || 6 })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Off days
+              </span>
+              <input
+                type="number"
+                min={0}
+                value={builderForm.offDays}
+                onChange={(event) =>
+                  setBuilderForm({ ...builderForm, offDays: Number(event.target.value) || 2 })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Mandatory engineer
+              </span>
+              <select
+                value={builderForm.mandatoryEngineer}
+                onChange={(event) =>
+                  setBuilderForm({ ...builderForm, mandatoryEngineer: event.target.value })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              >
+                <option value="">No mandatory engineer</option>
+                {activeEngineers.map((engineer) => (
+                  <option key={engineer.id} value={engineer.id}>
+                    {engineer.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Mandatory rule type
+              </span>
+              <select
+                value={builderForm.mandatoryRuleType}
+                onChange={(event) =>
+                  setBuilderForm({ ...builderForm, mandatoryRuleType: event.target.value })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              >
+                <option value="Must be scheduled">Must be scheduled</option>
+                <option value="Must be off">Must be off</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                Mandatory shift
+              </span>
+              <select
+                value={builderForm.mandatoryShift}
+                onChange={(event) =>
+                  setBuilderForm({
+                    ...builderForm,
+                    mandatoryShift: event.target.value as ShiftType,
+                  })
+                }
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              >
+                {(["Morning", "Evening", "Night"] as ShiftType[]).map((shiftType) => (
+                  <option key={shiftType} value={shiftType}>
+                    {shiftType}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block md:col-span-2">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">Reason</span>
+              <textarea
+                rows={3}
+                value={builderForm.reason}
+                onChange={(event) => setBuilderForm({ ...builderForm, reason: event.target.value })}
+                className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2 text-sm resize-none"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setBuilderOpen(false)}
+              className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={buildRosterPreview}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Generate Preview
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <RosterDialog
         editor={editor}

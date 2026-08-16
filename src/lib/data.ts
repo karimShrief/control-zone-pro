@@ -908,7 +908,7 @@ export interface SystemSettings {
 export const systemSettings: SystemSettings = {
   appName: "Ops Command Platform",
   logoPlaceholder: "OCP",
-  themePreference: "System",
+  themePreference: "Light",
   enabledModules: moduleNames,
   navigationVisibility: {
     engineer: roleConfigs.find((role) => role.id === "engineer")?.modules ?? [],
