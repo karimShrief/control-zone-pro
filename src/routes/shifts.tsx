@@ -129,6 +129,7 @@ function ShiftsPage() {
   const canEditRoster = canManageRoster(user);
   const canSubmitRequest = canSubmitShiftRequests(user);
   const canGenerateRoster = user ? ["manager", "admin"].includes(user.role) : false;
+  const isLimitedOperationalView = user?.role === "engineer" || user?.role === "shift-lead";
   const currentShiftType = shiftService.currentShiftType();
   const currentShift = rows.find(
     (shift) => shift.date === today && shift.type === currentShiftType,
@@ -893,71 +894,74 @@ function ShiftsPage() {
       ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-        {user?.role === "engineer" || user?.role === "shift-lead" ? <ShiftClockCard /> : null}
-        <KpiCard
-          label="Availability"
-          value={`${availabilitySummary.available}/${availabilitySummary.total}`}
-          sub="available engineers available for rotation"
-          icon={UserPlus}
-          tone="success"
-        />
-        <KpiCard
-          label="External Activity"
-          value={availabilitySummary.external}
-          sub="not in active roster rotation"
-          icon={Moon}
-          tone="warning"
-        />
-        <KpiCard
-          label="Emergency Leave"
-          value={availabilitySummary.emergency}
-          sub="requires human review"
-          icon={UserMinus}
-          tone="critical"
-        />
-        <KpiCard
-          label="Needs Review"
-          value={attentionCount}
-          sub="Understaffed, pending or conflict"
-          icon={Filter}
-          tone={attentionCount ? "warning" : "success"}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-        {user?.role === "engineer" || user?.role === "shift-lead" ? <ShiftClockCard /> : null}
-        <KpiCard
-          label="Current Shift"
-          value={currentShiftType}
-          sub={
-            currentShift
-              ? `${currentShift.engineers.length} engineers assigned today`
-              : "No roster published"
-          }
-          icon={Clock}
-          tone={currentShift?.coverageStatus === "Covered" ? "success" : "warning"}
-        />
-        <KpiCard
-          label="Covered Shifts"
-          value={coveredCount}
-          sub="Within visible roster"
-          icon={CircleDot}
-          tone="success"
-        />
-        <KpiCard
-          label="Needs Review"
-          value={attentionCount}
-          sub="Understaffed, pending or conflict"
-          icon={Filter}
-          tone={attentionCount ? "warning" : "success"}
-        />
-        <KpiCard
-          label="Conflicts"
-          value={conflicts.length}
-          sub="Same-day double assignments"
-          icon={Repeat}
-          tone={conflicts.length ? "critical" : "success"}
-        />
+        {isLimitedOperationalView ? (
+          <>
+            <ShiftClockCard />
+            <KpiCard
+              label="Current Shift"
+              value={currentShiftType}
+              sub={
+                currentShift
+                  ? `${currentShift.engineers.length} engineers assigned today`
+                  : "No roster published"
+              }
+              icon={Clock}
+              tone={currentShift?.coverageStatus === "Covered" ? "success" : "warning"}
+            />
+            <KpiCard
+              label="Covered Shifts"
+              value={coveredCount}
+              sub="Within visible roster"
+              icon={CircleDot}
+              tone="success"
+            />
+            <KpiCard
+              label="Needs Review"
+              value={attentionCount}
+              sub="Understaffed, pending or conflict"
+              icon={Filter}
+              tone={attentionCount ? "warning" : "success"}
+            />
+            <KpiCard
+              label="Conflicts"
+              value={conflicts.length}
+              sub="Same-day double assignments"
+              icon={Repeat}
+              tone={conflicts.length ? "critical" : "success"}
+            />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              label="Availability"
+              value={`${availabilitySummary.available}/${availabilitySummary.total}`}
+              sub="available engineers available for rotation"
+              icon={UserPlus}
+              tone="success"
+            />
+            <KpiCard
+              label="External Activity"
+              value={availabilitySummary.external}
+              sub="not in active roster rotation"
+              icon={Moon}
+              tone="warning"
+            />
+            <KpiCard
+              label="Emergency Leave"
+              value={availabilitySummary.emergency}
+              sub="requires human review"
+              icon={UserMinus}
+              tone="critical"
+            />
+            <KpiCard
+              label="Needs Review"
+              value={attentionCount}
+              sub="Understaffed, pending or conflict"
+              icon={Filter}
+              tone={attentionCount ? "warning" : "success"}
+            />
+          </>
+        )}
       </div>
 
       <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
