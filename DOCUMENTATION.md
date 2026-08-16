@@ -127,38 +127,41 @@ RBAC is centralized in `src/lib/rbac.ts`.
 
 ### Route-level access
 
-| Route prefix      | Allowed roles                       |
-| ----------------- | ----------------------------------- |
-| `/dashboard`      | Manager, Executive, Admin           |
-| `/my-work`        | Engineer                            |
-| `/tasks`          | Engineer, Manager, Admin            |
-| `/incidents`      | Engineer, Manager, Executive, Admin |
-| `/projects`       | Engineer, Manager, Executive, Admin |
-| `/shifts`         | Engineer, Manager, Admin            |
-| `/shift-requests` | Engineer, Manager, Admin            |
-| `/handover`       | Engineer, Manager, Admin            |
-| `/sop`            | Engineer, Manager, Executive, Admin |
-| `/productivity`   | Manager, Executive, Admin           |
-| `/reports`        | Manager, Executive, Admin           |
-| `/admin`          | Admin                               |
+| Route prefix      | Allowed roles                                         |
+| ----------------- | ----------------------------------------------------- |
+| `/dashboard`      | Manager, Executive, Admin                             |
+| `/my-work`        | Engineer, Shift Lead                                  |
+| `/tasks`          | Engineer, Shift Lead, Manager, Admin                  |
+| `/incidents`      | Engineer, Shift Lead, Manager, Executive, Admin       |
+| `/projects`       | Engineer, Shift Lead, Manager, Executive, Admin       |
+| `/shifts`         | Engineer, Shift Lead, Manager, Executive, Admin       |
+| `/shift-requests` | Engineer, Shift Lead, Manager, Admin                  |
+| `/handover`       | Engineer, Shift Lead, Manager, Admin                  |
+| `/sop`            | Engineer, Shift Lead, Manager, Executive, Admin       |
+| `/import-center`  | Shift Lead, Manager, Executive, Admin                 |
+| `/productivity`   | Manager, Executive, Admin                             |
+| `/reports`        | Shift Lead, Manager, Executive, Admin                 |
+| `/admin`          | Admin                                                 |
 
 `AppShell` enforces route access for direct navigation. If no user is logged in, users are redirected to `/login`. If a logged-in user accesses a disallowed route, they are redirected to their role landing page.
 
 ### Action-level access
 
-| Action                       | Allowed roles / rules                                    |
-| ---------------------------- | -------------------------------------------------------- |
-| Task manage/read actions     | Engineer, Manager, Admin                                 |
-| Task edit                    | Manager/Admin, or Engineer if assigned to self or shared |
-| Incident create/work actions | Engineer, Manager, Admin                                 |
-| Shift request submit         | Engineer                                                 |
-| Shift request approve/reject | Manager, Admin                                           |
-| Handover submit              | Engineer                                                 |
-| Handover audit/review        | Manager, Admin                                           |
-| SOP create/manage            | Manager, Admin                                           |
-| SOP read/download            | All roles with SOP route access                          |
-| Project manage/add task      | Manager, Admin                                           |
-| Project task progress edit   | Manager/Admin, or assigned Engineer                      |
+| Action                            | Allowed roles / rules                                    |
+| --------------------------------- | -------------------------------------------------------- |
+| Task manage/read actions          | Engineer, Shift Lead, Manager, Admin                     |
+| Task edit                         | Manager/Admin, or Engineer/Shift Lead if assigned to self or shared |
+| Incident create                   | Engineer, Shift Lead, Admin                               |
+| Incident work actions             | Engineer, Shift Lead, Manager, Admin                     |
+| Shift request submit              | Engineer, Shift Lead                                      |
+| Shift request approve/reject      | Manager, Admin                                            |
+| Handover submit                   | Engineer, Shift Lead, Manager, Admin                     |
+| Handover audit/review             | Shift Lead, Manager, Admin                               |
+| SOP create/manage                 | Manager, Admin                                            |
+| SOP read/download                 | All roles with SOP route access                           |
+| Project manage/add task           | Manager, Admin                                            |
+| Project task progress edit        | Manager/Admin, or assigned Engineer/Shift Lead           |
+| Roster generation / fixed rules  | Manager, Admin                                            |
 
 ## Service layer
 
@@ -196,6 +199,10 @@ Project completion recalculates from the average completion of project subtasks.
 ### Shift service
 
 - `shiftService.listSchedule()`
+- `shiftService.importShifts(...)`
+- `shiftService.updateShift(...)`
+
+Current roster generation treats fixed shift assignments as hard constraints before off-day balancing. This is enforced in the roster builder logic and is documented as a required behavior for demo/acceptance validation.
 
 Shift clock sign-in/sign-out state is managed in `src/lib/shift-clock.tsx` and persists to local storage.
 
