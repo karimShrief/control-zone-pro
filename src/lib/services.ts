@@ -163,6 +163,11 @@ function hydrateMockShifts() {
   }
 }
 
+function persistMockShifts() {
+  if (typeof window === "undefined") return;
+  writeMockStorage("ops-command-mock-shifts", shifts);
+}
+
 function hydrateMockIncidents() {
   if (typeof window === "undefined") return;
   const stored = readMockStorage<Incident[]>("ops-command-mock-incidents", []);
@@ -1708,6 +1713,7 @@ export const shiftService = {
     };
     shift.coverageStatus = derivedCoverageStatus(shift);
     shifts.push(shift);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "shift.created",
@@ -1721,6 +1727,7 @@ export const shiftService = {
     const index = shifts.findIndex((item) => item.date === date && item.type === type);
     if (index === -1) return null;
     const [shift] = shifts.splice(index, 1);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "shift.deleted",
@@ -1760,6 +1767,7 @@ export const shiftService = {
       shifts.push(shift);
       created += 1;
     });
+    persistMockShifts();
     const result = { total: input.length, created, updated };
     recordAuditLog({
       actorId: adminActor(actorId),
@@ -1835,6 +1843,7 @@ export const shiftService = {
       });
     });
 
+    persistMockShifts();
     const result = {
       month: input.month,
       total: dates.length * input.shiftTypes.length,
@@ -1881,6 +1890,7 @@ export const shiftService = {
     if (input.coverageStatus) shift.coverageStatus = input.coverageStatus;
     if (input.notes !== undefined) shift.notes = input.notes;
     shift.coverageStatus = derivedCoverageStatus(shift);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "shift.updated",
@@ -1896,6 +1906,7 @@ export const shiftService = {
     const before = { engineers: [...shift.engineers] };
     if (!shift.engineers.includes(engineerId)) shift.engineers.push(engineerId);
     shift.coverageStatus = derivedCoverageStatus(shift);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "roster.engineer.added",
@@ -1912,6 +1923,7 @@ export const shiftService = {
     shift.engineers = shift.engineers.filter((id) => id !== engineerId);
     if (shift.shiftLead === engineerId) shift.shiftLead = shift.engineers[0];
     shift.coverageStatus = derivedCoverageStatus(shift);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "roster.engineer.removed",
@@ -1930,6 +1942,7 @@ export const shiftService = {
     const shift = ensureShift(date, type);
     const before = { notes: shift.notes };
     shift.notes = note;
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "shift.note.updated",
