@@ -128,6 +128,55 @@ function nextNumericId(prefix: string, ids: string[]) {
   return `${prefix}${next}`;
 }
 
+function readMockStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? (JSON.parse(value) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeMockStorage<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function hydrateMockTasks() {
+  if (typeof window === "undefined") return;
+  const stored = readMockStorage<Task[]>("ops-command-mock-tasks", []);
+  if (stored.length) {
+    tasks.splice(0, tasks.length, ...stored);
+  } else {
+    writeMockStorage("ops-command-mock-tasks", tasks);
+  }
+}
+
+function hydrateMockShifts() {
+  if (typeof window === "undefined") return;
+  const stored = readMockStorage<Shift[]>("ops-command-mock-shifts", []);
+  if (stored.length) {
+    shifts.splice(0, shifts.length, ...stored);
+  } else {
+    writeMockStorage("ops-command-mock-shifts", shifts);
+  }
+}
+
+function hydrateMockIncidents() {
+  if (typeof window === "undefined") return;
+  const stored = readMockStorage<Incident[]>("ops-command-mock-incidents", []);
+  if (stored.length) {
+    incidents.splice(0, incidents.length, ...stored);
+  } else {
+    writeMockStorage("ops-command-mock-incidents", incidents);
+  }
+}
+
+hydrateMockTasks();
+hydrateMockShifts();
+hydrateMockIncidents();
+
 function adminActor(actorId: string | undefined) {
   return actorId ?? "system";
 }
@@ -1112,7 +1161,92 @@ export const configurationService = {
 };
 
 export const taskService = {
-  list: () => [...tasks],
+  list: () => {
+    hydrateMockTasks();
+    return [...tasks];
+  },
+  create: (
+    actorId: string,
+    input: {
+      title: string;
+      description: string;
+      details?: string;
+      acceptanceCriteria?: string;
+      type: TaskType;
+      category: string;
+      priority: Priority;
+      assignee: string | null;
+      dueDate: string;
+      relatedIncident?: string | null;
+      relatedProject?: string | null;
+      relatedHandover?: string | null;
+      notes?: string;
+    },
+  ) => {
+    if (
+      !input.title.trim() ||
+      !input.description.trim() ||
+      !input.assignee ||
+      !input.priority ||
+      !input.dueDate
+    ) {
+      return null;
+    }
+    const task: Task = {
+      id: nextNumericId(
+        "TASK-",
+        tasks.map((item) => item.id),
+      ),
+      title: input.title.trim(),
+      description: input.description.trim(),
+      details: input.details?.trim() || input.description.trim(),
+      acceptanceCriteria:
+        input.acceptanceCriteria?.trim() ||
+        "Task completed according to the assigned operational standard.",
+      type: input.type,
+      category: input.category,
+      priority: input.priority,
+      impact:
+        input.priority === "Critical" ? "High" : input.priority === "High" ? "High" : "Medium",
+      status: "New",
+      assignee: input.assignee,
+      dueDate: input.dueDate,
+      sla: "On Track",
+      comments: 0,
+      evidence: 0,
+      audit: "Pending",
+      relatedIncident: input.relatedIncident ?? null,
+      relatedProject: input.relatedProject ?? null,
+      relatedHandover: input.relatedHandover ?? null,
+      notes: input.notes?.trim() || "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    tasks.unshift(task);
+    writeMockStorage("ops-command-mock-tasks", tasks);
+    recordAuditLog({
+      actorId,
+      action: "task.created",
+      entityType: "task",
+      entityId: task.id,
+      after: task,
+    });
+    return task;
+  },
+  update: (taskId: string, actorId: string, input: Partial<Task>) => {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return null;
+    Object.assign(task, input, { updatedAt: new Date().toISOString() });
+    writeMockStorage("ops-command-mock-tasks", tasks);
+    recordAuditLog({
+      actorId,
+      action: "task.updated",
+      entityType: "task",
+      entityId: taskId,
+      after: task,
+    });
+    return task;
+  },
   createFromTemplate: (actorId: string, templateId: string) => {
     const template = taskTemplates.find((item) => item.id === templateId && item.active);
     if (!template) return null;
@@ -1138,6 +1272,7 @@ export const taskService = {
       audit: "Pending" as const,
     };
     tasks.unshift(task);
+    writeMockStorage("ops-command-mock-tasks", tasks);
     recordAuditLog({
       actorId,
       action: "task.generated-from-template",
@@ -1152,6 +1287,8 @@ export const taskService = {
     if (!task) return null;
     const before = { status: task.status };
     task.status = status;
+    task.updatedAt = new Date().toISOString();
+    writeMockStorage("ops-command-mock-tasks", tasks);
     recordAuditLog({
       actorId,
       action: "task.status.update",
@@ -1167,6 +1304,8 @@ export const taskService = {
     if (!task) return null;
     const before = { assignee: task.assignee };
     task.assignee = assigneeId;
+    task.updatedAt = new Date().toISOString();
+    writeMockStorage("ops-command-mock-tasks", tasks);
     recordAuditLog({
       actorId,
       action: "task.assign",
@@ -1183,7 +1322,22 @@ export const incidentService = {
   list: () => [...incidents],
   create: (
     actorId: string,
-    input: Pick<Incident, "title" | "description" | "source" | "category">,
+    input: Pick<
+      Incident,
+      | "title"
+      | "description"
+      | "source"
+      | "category"
+      | "severity"
+      | "shift"
+      | "incidentAt"
+      | "impactDescription"
+      | "immediateActionTaken"
+      | "currentStatus"
+      | "relatedTask"
+      | "relatedHandover"
+      | "notes"
+    >,
   ) => {
     const rule = incidentRules.find((item) => item.category === input.category && item.active);
     const incident: Incident = {
@@ -1191,22 +1345,29 @@ export const incidentService = {
         "INC-",
         incidents.map((incident) => incident.id),
       ),
-      title: input.title,
-      description: rule
-        ? `${input.description}\n\nRule applied: ${rule.recommendedSop} / SLA ${rule.slaMinutes} min`
-        : input.description,
-      source: input.source,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      source: input.source ?? "Manual",
       sourceRef: rule ? `Rule: ${rule.id}` : "Manual Entry",
       category: input.category,
       subcategory: rule?.recommendedSop ?? "General",
-      severity: rule?.defaultSeverity ?? "SEV-3",
+      severity: input.severity ?? rule?.defaultSeverity ?? "SEV-3",
       status: "Unassigned",
       assignee: null,
       sla: "On Track",
       createdAt: new Date().toISOString().slice(0, 16).replace("T", " "),
       updatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+      shift: input.shift ?? "Morning",
+      incidentAt: input.incidentAt ?? new Date().toISOString(),
+      impactDescription: input.impactDescription?.trim() ?? "",
+      immediateActionTaken: input.immediateActionTaken?.trim() ?? "",
+      currentStatus: input.currentStatus ?? "Open",
+      relatedTask: input.relatedTask ?? null,
+      relatedHandover: input.relatedHandover ?? null,
+      notes: input.notes?.trim() ?? "",
     };
     incidents.unshift(incident);
+    writeMockStorage("ops-command-mock-incidents", incidents);
     recordAuditLog({
       actorId,
       action: "incident.create",

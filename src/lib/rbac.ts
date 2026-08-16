@@ -32,7 +32,7 @@ export function canAccessPath(user: User | null, pathname: string) {
 }
 
 export function canManageTasks(user: User | null) {
-  return !!user && ["engineer", "manager", "admin"].includes(user.role);
+  return !!user && ["engineer", "shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canEditTask(
@@ -64,11 +64,11 @@ export function canCommentOnHandover(user: User | null) {
 }
 
 export function canCreateIncidents(user: User | null) {
-  return !!user && ["engineer", "manager", "admin"].includes(user.role);
+  return !!user && ["engineer", "shift-lead", "admin"].includes(user.role);
 }
 
 export function canWorkIncidents(user: User | null) {
-  return !!user && ["engineer", "manager", "admin"].includes(user.role);
+  return !!user && ["engineer", "shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canManageShiftRequests(user: User | null) {

@@ -233,9 +233,8 @@ function ShiftsPage() {
       return;
     }
 
-    const unavailableSet = new Set(autoGenerateForm.excludedEngineers);
     const available = activeEngineers
-      .filter((engineer) => !unavailableSet.has(engineer.id))
+      .filter((engineer) => !autoGenerateForm.excludedEngineers.includes(engineer.id))
       .filter((engineer) => {
         const availability = engineer.availability ?? "Available";
         return !["Emergency Leave", "Off Duty", "On Leave"].includes(availability);
@@ -247,11 +246,11 @@ function ShiftsPage() {
       return;
     }
 
-    const fixedRulesByDate = new Map<string, Record<ShiftType, string[]>>();
-    const warningsByDate = new Map<string, string[]>();
     const fixedRules = [...autoGenerateForm.fixedShiftRules].sort((a, b) =>
       a.startDate.localeCompare(b.startDate),
     );
+    const warningsByDate = new Map<string, string[]>();
+    const fixedAssignmentsByDate = new Map<string, Record<ShiftType, string[]>>();
 
     fixedRules.forEach((rule) => {
       const ruleStart = new Date(`${rule.startDate}T00:00:00`);
@@ -272,27 +271,24 @@ function ShiftsPage() {
         const date = cursor.toISOString().slice(0, 10);
         if (date < autoGenerateForm.startDate || date > autoGenerateForm.endDate) continue;
 
-        const dayAssignments = fixedRulesByDate.get(date) ?? {
+        const dayAssignments = fixedAssignmentsByDate.get(date) ?? {
           Morning: [],
           Evening: [],
           Night: [],
         };
 
-        const engineerName = userById(rule.engineerId) || "Engineer";
-        if (unavailableSet.has(rule.engineerId)) {
+        const engineerName = userById(rule.engineerId)?.name ?? "Engineer";
+        if (autoGenerateForm.excludedEngineers.includes(rule.engineerId)) {
           const list = warningsByDate.get(date) ?? [];
           list.push(`${engineerName} is fixed to ${rule.shiftType} but is unavailable.`);
           warningsByDate.set(date, list);
           continue;
         }
 
-        const isConflicting =
-          dayAssignments[rule.shiftType].includes(rule.engineerId) ||
-          dayAssignments.Morning.includes(rule.engineerId) ||
-          dayAssignments.Evening.includes(rule.engineerId) ||
-          dayAssignments.Night.includes(rule.engineerId);
-
-        if (isConflicting) {
+        const existingForEngineer = Object.values(dayAssignments).some((shiftAssignments) =>
+          shiftAssignments.includes(rule.engineerId),
+        );
+        if (existingForEngineer) {
           const list = warningsByDate.get(date) ?? [];
           list.push(`${engineerName} has conflicting fixed shift assignments.`);
           warningsByDate.set(date, list);
@@ -300,115 +296,113 @@ function ShiftsPage() {
         }
 
         dayAssignments[rule.shiftType].push(rule.engineerId);
-        fixedRulesByDate.set(date, dayAssignments);
+        fixedAssignmentsByDate.set(date, dayAssignments);
       }
     });
 
     const generated: Shift[] = [];
     const cursor = new Date(start);
     let previousNightWorkers = new Set<string>();
+    const shiftOrder: ShiftType[] = ["Morning", "Evening", "Night"];
 
     while (cursor <= end) {
       const date = cursor.toISOString().slice(0, 10);
-      const dayBlocked = new Set(previousNightWorkers);
-      const dayAssignments = fixedRulesByDate.get(date) ?? {
+      const fixedDayAssignments = fixedAssignmentsByDate.get(date) ?? {
         Morning: [],
         Evening: [],
         Night: [],
       };
-      const dayAssigned = new Set<string>([
-        ...dayAssignments.Morning,
-        ...dayAssignments.Evening,
-        ...dayAssignments.Night,
-      ]);
-      const dayWarnings = warningsByDate.get(date) ?? [];
-
-      const fillShift = (type: ShiftType, required: number, existing: string[]) => {
-        const openPool = available.filter(
-          (engineerId) =>
-            !dayAssigned.has(engineerId) &&
-            !dayBlocked.has(engineerId) &&
-            !existing.includes(engineerId),
-        );
-        const assigned = [...existing];
-        const slotsNeeded = Math.max(0, required - assigned.length);
-        openPool.slice(0, slotsNeeded).forEach((engineerId) => {
-          assigned.push(engineerId);
-          dayAssigned.add(engineerId);
-        });
-        return assigned;
+      const assignedByShift: Record<ShiftType, string[]> = {
+        Morning: [...fixedDayAssignments.Morning],
+        Evening: [...fixedDayAssignments.Evening],
+        Night: [...fixedDayAssignments.Night],
       };
-
-      const morningRequired = Math.max(1, dayAssignments.Morning.length || 1);
-      const eveningRequired = 1;
-      const nightRequired = 1;
-
-      const morningEngineers = fillShift("Morning", morningRequired, dayAssignments.Morning);
-      const eveningEngineers = fillShift("Evening", eveningRequired, dayAssignments.Evening);
-      const nightEngineers = fillShift("Night", nightRequired, dayAssignments.Night);
-      const allAssigned = Array.from(
-        new Set([...morningEngineers, ...eveningEngineers, ...nightEngineers]),
+      const lockedEngineers = new Set(
+        Object.values(assignedByShift).flatMap((engineers) => engineers),
       );
-      const offEngineers = available.filter((engineerId) => !allAssigned.includes(engineerId));
+      const allWarnings = warningsByDate.get(date) ?? [];
 
-      if (allAssigned.length < morningRequired + eveningRequired + nightRequired) {
-        dayWarnings.push(
-          "Coverage may be incomplete because there are not enough available engineers.",
+      for (const type of shiftOrder) {
+        if (type === "Morning" && assignedByShift.Morning.length === 0) {
+          const pool = available.filter(
+            (engineerId) =>
+              !lockedEngineers.has(engineerId) &&
+              !previousNightWorkers.has(engineerId) &&
+              !assignedByShift.Evening.includes(engineerId) &&
+              !assignedByShift.Night.includes(engineerId),
+          );
+          const selected = pool.slice(0, 1);
+          selected.forEach((engineerId) => {
+            assignedByShift.Morning.push(engineerId);
+            lockedEngineers.add(engineerId);
+          });
+        }
+
+        if (type === "Evening" && assignedByShift.Evening.length === 0) {
+          const pool = available.filter(
+            (engineerId) =>
+              !lockedEngineers.has(engineerId) &&
+              !assignedByShift.Morning.includes(engineerId) &&
+              !assignedByShift.Night.includes(engineerId),
+          );
+          const selected = pool.slice(0, 1);
+          selected.forEach((engineerId) => {
+            assignedByShift.Evening.push(engineerId);
+            lockedEngineers.add(engineerId);
+          });
+        }
+
+        if (type === "Night" && assignedByShift.Night.length === 0) {
+          const pool = available.filter(
+            (engineerId) =>
+              !lockedEngineers.has(engineerId) &&
+              !assignedByShift.Morning.includes(engineerId) &&
+              !assignedByShift.Evening.includes(engineerId),
+          );
+          const selected = pool.slice(0, 1);
+          selected.forEach((engineerId) => {
+            assignedByShift.Night.push(engineerId);
+            lockedEngineers.add(engineerId);
+          });
+        }
+      }
+
+      const offEngineers = available.filter(
+        (engineerId) =>
+          !assignedByShift.Morning.includes(engineerId) &&
+          !assignedByShift.Evening.includes(engineerId) &&
+          !assignedByShift.Night.includes(engineerId),
+      );
+
+      const rowWarnings = [...allWarnings];
+      const fixedMorningNames = fixedDayAssignments.Morning.map((id) => userById(id)?.name).filter(
+        Boolean,
+      );
+      if (fixedMorningNames.length > 0) {
+        rowWarnings.push(
+          `${fixedMorningNames.join(", ")} is fixed to Morning, so normal off-day rotation was not fully applied.`,
         );
       }
 
-      const coverageStatus: Shift["coverageStatus"] =
-        morningEngineers.length >= morningRequired &&
-        eveningEngineers.length >= eveningRequired &&
-        nightEngineers.length >= nightRequired
-          ? "Covered"
-          : "Understaffed";
-
-      const dayEntry: Shift[] = [
-        {
-          date,
-          type: "Morning",
-          engineers: morningEngineers,
-          shiftLead: morningEngineers[0] || undefined,
-          coverageStatus,
-          notes: dayAssignments.Morning.length
-            ? "Fixed and rotated morning coverage"
+      const dayEntry = shiftOrder.map((type) => ({
+        date,
+        type,
+        engineers: assignedByShift[type],
+        shiftLead: assignedByShift[type][0] ?? undefined,
+        coverageStatus: assignedByShift[type].length > 0 ? "Covered" : "Understaffed",
+        notes:
+          type === "Morning"
+            ? fixedDayAssignments.Morning.length
+              ? "Fixed morning coverage applied"
+              : "Generated roster draft"
             : "Generated roster draft",
-          status: "Draft",
-          warnings: dayWarnings.length ? [...new Set(dayWarnings)] : ["No warnings"],
-        },
-        {
-          date,
-          type: "Evening",
-          engineers: eveningEngineers,
-          shiftLead: eveningEngineers[0] || undefined,
-          coverageStatus,
-          notes: "Generated roster draft",
-          status: "Draft",
-          warnings: dayWarnings.length ? [...new Set(dayWarnings)] : ["No warnings"],
-        },
-        {
-          date,
-          type: "Night",
-          engineers: nightEngineers,
-          shiftLead: nightEngineers[0] || undefined,
-          coverageStatus,
-          notes: "Generated roster draft",
-          status: "Draft",
-          warnings: dayWarnings.length ? [...new Set(dayWarnings)] : ["No warnings"],
-        },
-      ];
+        status: "Draft" as const,
+        warnings: rowWarnings.length ? [...new Set(rowWarnings)] : ["No warnings"],
+      }));
 
       generated.push(...dayEntry);
-      previousNightWorkers = new Set(nightEngineers);
+      previousNightWorkers = new Set(assignedByShift.Night);
       cursor.setDate(cursor.getDate() + 1);
-
-      if (offEngineers.length) {
-        dayEntry[0].notes = `${dayEntry[0].notes} • Off: ${offEngineers
-          .map((id) => userById(id))
-          .filter(Boolean)
-          .join(", ")}`;
-      }
     }
 
     const persisted = generated.map((shift) => ({

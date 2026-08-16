@@ -163,6 +163,8 @@ export interface Task {
   id: string;
   title: string;
   description: string;
+  details?: string;
+  acceptanceCriteria?: string;
   type: TaskType;
   category: string;
   priority: Priority;
@@ -174,9 +176,37 @@ export interface Task {
   comments: number;
   evidence: number;
   audit: "Pending" | "Approved" | "Needs Update";
+  relatedIncident?: string | null;
+  relatedProject?: string | null;
+  relatedHandover?: string | null;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export const tasks: Task[] = [];
+export const tasks: Task[] = [
+  {
+    id: "TASK-1",
+    title: "Daily DC equipment check",
+    description: "Review the critical DC equipment checklist before the next shift.",
+    details: "Inspect UPS, cooling, and generator readings. Confirm no alarms remain open.",
+    acceptanceCriteria: "Checklist completed and signed off by the shift lead.",
+    type: "Daily DC Operation",
+    category: "DC Operations",
+    priority: "High",
+    impact: "High",
+    status: "In Progress",
+    assignee: "u6",
+    dueDate: new Date().toISOString().slice(0, 10),
+    sla: "On Track",
+    comments: 0,
+    evidence: 0,
+    audit: "Pending",
+    notes: "Complete before the next maintenance window.",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
 
 export type IncidentSource =
   "Monitoring Alert" | "Manual" | "Handover" | "Project Issue" | "ITSM Ticket";
@@ -209,6 +239,14 @@ export interface Incident {
   createdAt: string;
   updatedAt: string;
   resolution?: string;
+  shift?: "Morning" | "Evening" | "Night";
+  incidentAt?: string;
+  impactDescription?: string;
+  immediateActionTaken?: string;
+  currentStatus?: string;
+  relatedTask?: string | null;
+  relatedHandover?: string | null;
+  notes?: string;
 }
 
 export const incidents: Incident[] = [];
