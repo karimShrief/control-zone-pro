@@ -46,13 +46,14 @@ export function canEditTask(
 }
 
 export function canManageProjects(user: User | null) {
-  return !!user && ["manager", "admin"].includes(user.role);
+  return !!user && ["manager", "shift-lead", "admin"].includes(user.role);
 }
 
 export function canEditProjectTask(user: User | null, task: Pick<ProjectTask, "assignee"> | null) {
   if (!user || !task) return false;
   if (["manager", "admin"].includes(user.role)) return true;
-  return ["engineer", "shift-lead"].includes(user.role) && task.assignee === user.id;
+  if (user.role === "shift-lead") return task.assignee === user.id || task.assignee === null;
+  return ["engineer"].includes(user.role) && task.assignee === user.id;
 }
 
 export function canSubmitHandover(user: User | null) {
@@ -72,7 +73,7 @@ export function canWorkIncidents(user: User | null) {
 }
 
 export function canManageShiftRequests(user: User | null) {
-  return !!user && ["manager", "admin"].includes(user.role);
+  return !!user && ["shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canSubmitShiftRequests(user: User | null) {

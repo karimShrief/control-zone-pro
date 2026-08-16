@@ -264,6 +264,8 @@ export interface ProjectTask {
   completion: number;
   comments: number;
   evidence: number;
+  latestUpdate?: string;
+  lastUpdatedBy?: string | null;
 }
 
 export interface Project {
@@ -369,6 +371,7 @@ export interface ShiftRequest {
   requestedShift: ShiftType;
   reason: string;
   status: "Pending" | "Approved" | "Rejected";
+  shiftLeadApproval: string;
   managerApproval: string;
 }
 

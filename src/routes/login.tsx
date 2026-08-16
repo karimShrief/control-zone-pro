@@ -1,8 +1,7 @@
 import { createFileRoute, useNavigate, Navigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { useAuth, landingFor } from "@/lib/auth";
-import { Activity, Shield, Lock } from "lucide-react";
-import { users } from "@/lib/data";
+import { Activity, ArrowRight, Lock, ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
   component: LoginPage,
@@ -34,7 +33,7 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex bg-sidebar text-sidebar-foreground">
-      {/* Left brand panel */}
+      {/* Left welcome panel */}
       <div className="hidden lg:flex flex-1 flex-col justify-between p-12 relative overflow-hidden">
         <div
           className="absolute inset-0 opacity-20"
@@ -49,40 +48,48 @@ function LoginPage() {
               <Activity className="h-6 w-6" />
             </div>
             <div>
-              <div className="text-xl font-semibold">Ops Command Platform</div>
+              <div className="text-xl font-semibold">DC & NOC Operations Intelligence</div>
               <div className="text-xs uppercase tracking-widest text-sidebar-foreground/60">
-                Data Center · NOC
+                Nerve Center
               </div>
             </div>
           </div>
         </div>
-        <div className="relative space-y-6 max-w-md">
+
+        <div className="relative space-y-6 max-w-lg">
+          <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border bg-sidebar-accent/40 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-sidebar-foreground/70">
+            <ShieldCheck className="h-3.5 w-3.5" /> Welcome
+          </div>
           <h1 className="text-4xl font-semibold leading-tight">
-            Unified command center for live operations.
+            Make operations coordination simple, visible, and ready for action.
           </h1>
-          <p className="text-sidebar-foreground/70 text-base">
-            Track tasks, incidents, projects, shifts and handovers from a single operations control
-            surface — built for engineers, managers and executives.
+          <p className="text-sidebar-foreground/75 text-base leading-7">
+            This tool brings together daily operations work, shift oversight, incident follow-up,
+            and project execution in one place so teams can move faster and stay aligned.
           </p>
-          <div className="grid grid-cols-2 gap-3 pt-4">
+
+          <div className="space-y-3 pt-2">
             {[
-              { k: "99.98%", v: "Service Availability" },
-              { k: "12 min", v: "Avg. Resolution" },
-              { k: "ISO 27001", v: "Aligned" },
-              { k: "24×7", v: "NOC Coverage" },
-            ].map((s) => (
+              "Monitor operational activity and team status",
+              "Track work from assignment through completion",
+              "Review project follow-up and escalation paths",
+            ].map((item) => (
               <div
-                key={s.v}
-                className="rounded-md border border-sidebar-border bg-sidebar-accent/40 p-3"
+                key={item}
+                className="flex items-start gap-3 rounded-md border border-sidebar-border bg-sidebar-accent/30 p-3"
               >
-                <div className="text-lg font-semibold text-sidebar-primary-foreground">{s.k}</div>
-                <div className="text-xs text-sidebar-foreground/70">{s.v}</div>
+                <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-sidebar-primary text-sidebar-primary-foreground">
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+                <span className="text-sm text-sidebar-foreground/80">{item}</span>
               </div>
             ))}
           </div>
         </div>
+
         <div className="relative text-xs text-sidebar-foreground/50 flex items-center gap-2">
-          <Shield className="h-3.5 w-3.5" /> Restricted access · authorized personnel only
+          <ShieldCheck className="h-3.5 w-3.5" /> Demo environment for onboarding and workflow
+          review
         </div>
       </div>
 
@@ -94,7 +101,7 @@ function LoginPage() {
               <div className="h-9 w-9 rounded-md bg-primary flex items-center justify-center text-primary-foreground">
                 <Activity className="h-5 w-5" />
               </div>
-              <div className="font-semibold">Ops Command</div>
+              <div className="font-semibold">DC & NOC Operations Intelligence</div>
             </div>
             <h2 className="text-2xl font-semibold">Sign in</h2>
             <p className="text-sm text-muted-foreground mt-1">
@@ -157,7 +164,7 @@ function LoginPage() {
               ))}
             </div>
             <div className="text-[11px] text-muted-foreground mt-3">
-              Replace these {users.length} starter users in the data layer before production use.
+              Use any of the demo accounts below to continue into the platform.
             </div>
           </div>
         </div>

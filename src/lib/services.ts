@@ -1519,6 +1519,8 @@ export const projectService = {
       completion: 0,
       comments: 0,
       evidence: 0,
+      latestUpdate: "Task created and awaiting assignment.",
+      lastUpdatedBy: actorId,
     };
     projectTasks.push(task);
     recalculateProjectCompletion(projectId);
@@ -1538,6 +1540,8 @@ export const projectService = {
     const before = { completion: task.completion, status: task.status };
     task.completion = nextCompletion;
     task.status = nextCompletion >= 100 ? "Done" : nextCompletion > 0 ? "In Progress" : "To Do";
+    task.lastUpdatedBy = actorId;
+    task.latestUpdate = `${userById(actorId)} updated progress to ${nextCompletion}% and set status to ${task.status}.`;
     const project = recalculateProjectCompletion(task.projectId);
     recordAuditLog({
       actorId,
@@ -1549,7 +1553,25 @@ export const projectService = {
         completion: task.completion,
         status: task.status,
         projectCompletion: project?.completion,
+        latestUpdate: task.latestUpdate,
       },
+    });
+    return task;
+  },
+  updateTaskAssignee: (taskId: string, assigneeId: string | null, actorId: string) => {
+    const task = projectTasks.find((item) => item.id === taskId);
+    if (!task) return null;
+    const before = { assignee: task.assignee };
+    task.assignee = assigneeId;
+    task.lastUpdatedBy = actorId;
+    task.latestUpdate = `${userById(actorId)} assigned this task to ${assigneeId ? userById(assigneeId) : "unassigned"}.`;
+    recordAuditLog({
+      actorId,
+      action: "project-task.assign",
+      entityType: "project-task",
+      entityId: task.id,
+      before,
+      after: { assignee: assigneeId, latestUpdate: task.latestUpdate },
     });
     return task;
   },
@@ -1961,6 +1983,7 @@ export const shiftRequestService = {
       id: `SR-${shiftRequests.length + 1}`,
       ...input,
       status: "Pending",
+      shiftLeadApproval: "-",
       managerApproval: "-",
     };
     shiftRequests.unshift(request);
@@ -1976,24 +1999,55 @@ export const shiftRequestService = {
   updateStatus: (requestId: string, status: ShiftRequest["status"], actorId: string) => {
     const request = shiftRequests.find((item) => item.id === requestId);
     if (!request) return null;
-    const before = { status: request.status, managerApproval: request.managerApproval };
-    request.status = status;
-    request.managerApproval = status === "Pending" ? "-" : `${status} by ${userById(actorId)}`;
-    if (status === "Approved") applyApprovedShiftRequest(request, actorId);
+    const actor = users.find((user) => user.id === actorId);
+    const before = {
+      status: request.status,
+      shiftLeadApproval: request.shiftLeadApproval,
+      managerApproval: request.managerApproval,
+    };
+
+    if (actor?.role === "shift-lead" || actor?.role === "admin") {
+      request.shiftLeadApproval = status === "Pending" ? "-" : `${status} by ${userById(actorId)}`;
+    }
+
+    if (actor?.role === "manager" || actor?.role === "admin") {
+      request.managerApproval = status === "Pending" ? "-" : `${status} by ${userById(actorId)}`;
+    }
+
+    if (
+      request.shiftLeadApproval.includes("Approved") &&
+      request.managerApproval.includes("Approved")
+    ) {
+      request.status = "Approved";
+    } else if (
+      request.shiftLeadApproval.includes("Rejected") ||
+      request.managerApproval.includes("Rejected")
+    ) {
+      request.status = "Rejected";
+    } else {
+      request.status = "Pending";
+    }
+
+    if (request.status === "Approved") applyApprovedShiftRequest(request, actorId);
+
     recordAuditLog({
       actorId,
       action:
-        status === "Approved"
+        request.status === "Approved"
           ? "shift-request.approved"
-          : status === "Rejected"
+          : request.status === "Rejected"
             ? "shift-request.rejected"
             : "shift-request.status.update",
       entityType: "shift-request",
       entityId: requestId,
       before,
-      after: { status: request.status, managerApproval: request.managerApproval },
+      after: {
+        status: request.status,
+        shiftLeadApproval: request.shiftLeadApproval,
+        managerApproval: request.managerApproval,
+      },
     });
-    request.managerApproval = status === "Pending" ? "-" : `${status} by ${userById(actorId)}`;
+
     return request;
   },
 };
