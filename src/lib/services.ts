@@ -79,6 +79,46 @@ export const auditService = {
   list: () => listAuditLogs(),
 };
 
+export const availabilityService = {
+  list: () =>
+    users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      availability: user.availability ?? "Available",
+      availabilityReason: user.availabilityReason ?? "Available for rotation",
+    })),
+  summary: () => {
+    const statuses = users.reduce(
+      (summary, user) => {
+        const availability = user.availability ?? "Available";
+        summary[availability] = (summary[availability] ?? 0) + 1;
+        return summary;
+      },
+      {} as Record<string, number>,
+    );
+
+    return {
+      total: users.length,
+      available: statuses["Available"] ?? 0,
+      external: statuses["External Activity"] ?? 0,
+      emergency: statuses["Emergency Leave"] ?? 0,
+      offDuty: statuses["Off Duty"] ?? 0,
+      onLeave: statuses["On Leave"] ?? 0,
+    };
+  },
+  get: (userId: string) => {
+    const user = users.find((item) => item.id === userId);
+    return {
+      id: user?.id ?? userId,
+      name: user?.name ?? userId,
+      role: user?.role ?? "engineer",
+      availability: user?.availability ?? "Available",
+      availabilityReason: user?.availabilityReason ?? "Available for rotation",
+    };
+  },
+};
+
 function nextNumericId(prefix: string, ids: string[]) {
   const next =
     Math.max(

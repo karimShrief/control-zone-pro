@@ -2,6 +2,8 @@
 // Replace these bootstrap records with your own team data or wire the services to an API.
 
 export type Role = "engineer" | "shift-lead" | "manager" | "executive" | "admin";
+export type AvailabilityStatus =
+  "Available" | "External Activity" | "Emergency Leave" | "Off Duty" | "On Leave";
 
 export interface User {
   id: string;
@@ -11,6 +13,8 @@ export interface User {
   role: Role;
   team?: string;
   status?: "Active" | "Inactive";
+  availability?: AvailabilityStatus;
+  availabilityReason?: string;
   avatar?: string;
 }
 
@@ -23,6 +27,8 @@ export const users: User[] = [
     role: "engineer",
     team: "DC",
     status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for rotation",
   },
   {
     id: "u2",
@@ -32,6 +38,8 @@ export const users: User[] = [
     role: "shift-lead",
     team: "Shared",
     status: "Active",
+    availability: "External Activity",
+    availabilityReason: "Training program outside the site",
   },
   {
     id: "u3",
@@ -41,6 +49,8 @@ export const users: User[] = [
     role: "manager",
     team: "Shared",
     status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster review",
   },
   {
     id: "u4",
@@ -49,6 +59,8 @@ export const users: User[] = [
     name: "Executive User",
     role: "executive",
     status: "Active",
+    availability: "Emergency Leave",
+    availabilityReason: "Emergency leave approved",
   },
   {
     id: "u5",
@@ -58,6 +70,74 @@ export const users: User[] = [
     role: "admin",
     team: "Shared",
     status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for support coverage",
+  },
+  {
+    id: "u6",
+    username: "karim",
+    password: "change-me",
+    name: "Karim",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u7",
+    username: "ahmed",
+    password: "change-me",
+    name: "Ahmed",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u8",
+    username: "mohamed",
+    password: "change-me",
+    name: "Mohamed",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u9",
+    username: "omar",
+    password: "change-me",
+    name: "Omar",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u10",
+    username: "ali",
+    password: "change-me",
+    name: "Ali",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u11",
+    username: "hassan",
+    password: "change-me",
+    name: "Hassan",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
   },
 ];
 
@@ -180,6 +260,8 @@ export interface Shift {
   shiftLead?: string;
   coverageStatus?: CoverageStatus;
   notes?: string;
+  status?: "Draft" | "Published";
+  warnings?: string[];
 }
 
 const today = new Date();

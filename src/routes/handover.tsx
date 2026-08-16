@@ -4,7 +4,7 @@ import { PageHeader, KpiCard } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/lib/auth";
 import { userById, type HandoverCategory, type HandoverPoint, type Priority } from "@/lib/data";
-import { canAuditHandover, canSubmitHandover } from "@/lib/rbac";
+import { canAuditHandover, canCommentOnHandover, canSubmitHandover } from "@/lib/rbac";
 import { configurationService, handoverService, shiftService } from "@/lib/services";
 import { Plus, ClipboardList, CheckCheck, AlertTriangle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -63,12 +63,14 @@ function HandoverPage() {
     shiftOptions[0]?.name ?? "Morning",
   );
   const [draftRows, setDraftRows] = useState<DraftHandoverRow[]>(() => [createDraftRow()]);
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const handoverTemplates = configurationService
     .listHandoverTemplates()
     .filter((template) => template.active);
 
   const canAudit = canAuditHandover(user);
   const canSubmit = canSubmitHandover(user);
+  const canComment = canCommentOnHandover(user);
   const isManager = canAudit;
   const filtered = useMemo(
     () =>
@@ -84,6 +86,25 @@ function HandoverPage() {
     : 0;
 
   const refresh = () => setRows(handoverService.list());
+
+  const addComment = (handoverId: string) => {
+    if (!user || !canComment) return;
+    const draft = (commentDrafts[handoverId] ?? "").trim();
+    if (!draft) {
+      toast.error("Comment text is required before adding a handover note.");
+      return;
+    }
+
+    handoverService.addComment(user.id, handoverId, {
+      commentText: draft,
+      handoverPointId: handoverId,
+      visibility: "Team",
+    });
+
+    setCommentDrafts((current) => ({ ...current, [handoverId]: "" }));
+    refresh();
+    toast.success("Comment added to the handover timeline");
+  };
 
   const updateAudit = (handover: HandoverPoint, audit: HandoverPoint["audit"]) => {
     if (!user || !canAudit) return;
@@ -413,6 +434,51 @@ function HandoverPage() {
                     <p className="mt-1 text-xs text-muted-foreground">{handover.notes}</p>
                     <div className="mt-2 rounded-md bg-muted/50 px-2 py-1.5 text-xs">
                       Next: {handover.nextAction}
+                    </div>
+                    <div className="mt-3 rounded-md border border-border bg-background p-2">
+                      <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Comment timeline
+                      </div>
+                      <div className="space-y-2">
+                        {handoverService.listComments(handover.id).length ? (
+                          handoverService.listComments(handover.id).map((comment) => (
+                            <div
+                              key={comment.id}
+                              className="rounded border border-border bg-muted/30 p-2"
+                            >
+                              <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                                <span>{userById(comment.createdBy)}</span>
+                                <span>{comment.role}</span>
+                              </div>
+                              <p className="mt-1 text-xs text-foreground">{comment.commentText}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-xs text-muted-foreground">No comments yet.</div>
+                        )}
+                      </div>
+                      {canComment ? (
+                        <div className="mt-3 space-y-2">
+                          <textarea
+                            value={commentDrafts[handover.id] ?? ""}
+                            onChange={(event) =>
+                              setCommentDrafts((current) => ({
+                                ...current,
+                                [handover.id]: event.target.value,
+                              }))
+                            }
+                            rows={2}
+                            placeholder="Add a comment for this handover point"
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
+                          />
+                          <button
+                            onClick={() => addComment(handover.id)}
+                            className="rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                          >
+                            Add comment
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-4 py-3">

@@ -9,7 +9,13 @@ interface AuthState {
   logout: () => void;
 }
 
-const AuthContext = createContext<AuthState | undefined>(undefined);
+const fallbackAuthState: AuthState = {
+  user: null,
+  login: () => null,
+  logout: () => undefined,
+};
+
+const AuthContext = createContext<AuthState>(fallbackAuthState);
 
 const STORAGE_KEY = "ops-command-user";
 
@@ -55,8 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
-  return ctx;
+  return ctx ?? fallbackAuthState;
 }
 
 export function landingFor(role: Role): string {

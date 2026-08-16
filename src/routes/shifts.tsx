@@ -28,6 +28,7 @@ import {
   Settings,
   Sun,
   Sunset,
+  Trash2,
   UserMinus,
   UserPlus,
   Wand2,
@@ -51,6 +52,17 @@ export const Route = createFileRoute("/shifts")({
 
 type EditorMode = "view" | "edit" | "add" | "remove" | "note";
 
+type FixedShiftRule = {
+  id: string;
+  engineerId: string;
+  shiftType: ShiftType;
+  startDate: string;
+  endDate: string;
+  reason: string;
+};
+
+const SHIFT_ELIGIBLE_ENGINEER_IDS = ["u6", "u7", "u8", "u9", "u10", "u11"];
+
 const REQUEST_TYPES: ShiftRequest["type"][] = [
   "Shift Swap",
   "Leave Early",
@@ -65,8 +77,7 @@ function ShiftsPage() {
   const today = new Date().toISOString().slice(0, 10);
   const shiftTypes = shiftService.listShiftTypes().filter((shiftType) => shiftType.enabled);
   const activeEngineers = appUsers.filter(
-    (target) =>
-      target.status !== "Inactive" && (target.role === "engineer" || target.role === "shift-lead"),
+    (target) => target.status !== "Inactive" && SHIFT_ELIGIBLE_ENGINEER_IDS.includes(target.id),
   );
   const [rows, setRows] = useState(() => shiftService.listSchedule());
   const [dateFrom, setDateFrom] = useState(today);
@@ -87,6 +98,19 @@ function ShiftsPage() {
   const [requestReason, setRequestReason] = useState("");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [generatedRoster, setGeneratedRoster] = useState<Shift[]>([]);
+  const [fixedRuleForm, setFixedRuleForm] = useState({
+    engineerId: activeEngineers[0]?.id ?? "",
+    shiftType: "Morning" as ShiftType,
+    startDate: today,
+    endDate: today,
+    reason: "Mandatory coverage",
+  });
+  const [autoGenerateForm, setAutoGenerateForm] = useState({
+    startDate: today,
+    endDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
+    fixedShiftRules: [] as FixedShiftRule[],
+    excludedEngineers: [] as string[],
+  });
   const [builderForm, setBuilderForm] = useState({
     startDate: today,
     endDate: new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10),
@@ -132,13 +156,311 @@ function ShiftsPage() {
       .sort((a, b) => `${a.date}-${a.type}`.localeCompare(`${b.date}-${b.type}`));
   }, [dateFrom, dateTo, engineerFilter, rows, search, shiftFilter, today, user]);
 
+  const groupedVisibleRows = useMemo(() => {
+    const grouped = new Map<string, Shift[]>();
+    visibleRows.forEach((shift) => {
+      const existing = grouped.get(shift.date) ?? [];
+      existing.push(shift);
+      grouped.set(shift.date, existing);
+    });
+
+    return Array.from(grouped.entries()).map(([date, shifts]) => {
+      const allEngineers = Array.from(new Set(shifts.flatMap((shift) => shift.engineers)));
+      const combinedLeads = shifts
+        .map((shift) => `${shift.type}: ${shift.shiftLead ? userById(shift.shiftLead) : "Not set"}`)
+        .join(" • ");
+      const notes = shifts
+        .map((shift) => `${shift.type}: ${shift.notes || "No notes added"}`)
+        .join(" • ");
+      const coverageStatus = shifts.some((shift) => shift.coverageStatus === "Conflict")
+        ? "Conflict"
+        : shifts.some((shift) => shift.coverageStatus === "Understaffed")
+          ? "Understaffed"
+          : shifts.some((shift) => shift.coverageStatus === "Pending Update")
+            ? "Pending Update"
+            : "Covered";
+
+      return {
+        date,
+        day: dayName(date),
+        shifts: shifts.sort((a, b) => a.type.localeCompare(b.type)),
+        allEngineers,
+        combinedLeads,
+        notes,
+        coverageStatus,
+      };
+    });
+  }, [visibleRows]);
+
   const upcoming = visibleRows.filter((shift) => shift.date >= today).slice(0, 4);
   const coveredCount = rows.filter((shift) => shift.coverageStatus === "Covered").length;
   const attentionCount = rows.filter((shift) =>
     ["Understaffed", "Pending Update", "Conflict"].includes(shift.coverageStatus ?? ""),
   ).length;
 
+  const availabilitySummary = useMemo(() => {
+    const summary = {
+      available: 0,
+      external: 0,
+      emergency: 0,
+      offDuty: 0,
+      total: activeEngineers.length,
+    };
+
+    activeEngineers.forEach((engineer) => {
+      const availability = engineer.availability ?? "Available";
+      if (availability === "Available") summary.available += 1;
+      if (availability === "External Activity") summary.external += 1;
+      if (availability === "Emergency Leave") summary.emergency += 1;
+      if (availability === "Off Duty" || availability === "On Leave") summary.offDuty += 1;
+    });
+
+    return summary;
+  }, [activeEngineers]);
+
   const refresh = () => setRows(shiftService.listSchedule());
+
+  const generateRosterRows = () => {
+    if (!user || !canGenerateRoster) {
+      toast.error("You do not have permission to generate a roster.");
+      return;
+    }
+
+    const start = new Date(`${autoGenerateForm.startDate}T00:00:00`);
+    const end = new Date(`${autoGenerateForm.endDate}T00:00:00`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      toast.error("Select a valid date range before generating the roster.");
+      return;
+    }
+
+    const unavailableSet = new Set(autoGenerateForm.excludedEngineers);
+    const available = activeEngineers
+      .filter((engineer) => !unavailableSet.has(engineer.id))
+      .filter((engineer) => {
+        const availability = engineer.availability ?? "Available";
+        return !["Emergency Leave", "Off Duty", "On Leave"].includes(availability);
+      })
+      .map((engineer) => engineer.id);
+
+    if (!available.length) {
+      toast.error("Coverage may be incomplete because there are not enough available engineers.");
+      return;
+    }
+
+    const fixedRulesByDate = new Map<string, Record<ShiftType, string[]>>();
+    const warningsByDate = new Map<string, string[]>();
+    const fixedRules = [...autoGenerateForm.fixedShiftRules].sort((a, b) =>
+      a.startDate.localeCompare(b.startDate),
+    );
+
+    fixedRules.forEach((rule) => {
+      const ruleStart = new Date(`${rule.startDate}T00:00:00`);
+      const ruleEnd = new Date(`${rule.endDate}T00:00:00`);
+      if (
+        Number.isNaN(ruleStart.getTime()) ||
+        Number.isNaN(ruleEnd.getTime()) ||
+        ruleEnd < ruleStart
+      ) {
+        return;
+      }
+
+      for (
+        let cursor = new Date(ruleStart);
+        cursor <= ruleEnd;
+        cursor.setDate(cursor.getDate() + 1)
+      ) {
+        const date = cursor.toISOString().slice(0, 10);
+        if (date < autoGenerateForm.startDate || date > autoGenerateForm.endDate) continue;
+
+        const dayAssignments = fixedRulesByDate.get(date) ?? {
+          Morning: [],
+          Evening: [],
+          Night: [],
+        };
+
+        const engineerName = userById(rule.engineerId) || "Engineer";
+        if (unavailableSet.has(rule.engineerId)) {
+          const list = warningsByDate.get(date) ?? [];
+          list.push(`${engineerName} is fixed to ${rule.shiftType} but is unavailable.`);
+          warningsByDate.set(date, list);
+          continue;
+        }
+
+        const isConflicting =
+          dayAssignments[rule.shiftType].includes(rule.engineerId) ||
+          dayAssignments.Morning.includes(rule.engineerId) ||
+          dayAssignments.Evening.includes(rule.engineerId) ||
+          dayAssignments.Night.includes(rule.engineerId);
+
+        if (isConflicting) {
+          const list = warningsByDate.get(date) ?? [];
+          list.push(`${engineerName} has conflicting fixed shift assignments.`);
+          warningsByDate.set(date, list);
+          continue;
+        }
+
+        dayAssignments[rule.shiftType].push(rule.engineerId);
+        fixedRulesByDate.set(date, dayAssignments);
+      }
+    });
+
+    const generated: Shift[] = [];
+    const cursor = new Date(start);
+    let previousNightWorkers = new Set<string>();
+
+    while (cursor <= end) {
+      const date = cursor.toISOString().slice(0, 10);
+      const dayBlocked = new Set(previousNightWorkers);
+      const dayAssignments = fixedRulesByDate.get(date) ?? {
+        Morning: [],
+        Evening: [],
+        Night: [],
+      };
+      const dayAssigned = new Set<string>([
+        ...dayAssignments.Morning,
+        ...dayAssignments.Evening,
+        ...dayAssignments.Night,
+      ]);
+      const dayWarnings = warningsByDate.get(date) ?? [];
+
+      const fillShift = (type: ShiftType, required: number, existing: string[]) => {
+        const openPool = available.filter(
+          (engineerId) =>
+            !dayAssigned.has(engineerId) &&
+            !dayBlocked.has(engineerId) &&
+            !existing.includes(engineerId),
+        );
+        const assigned = [...existing];
+        const slotsNeeded = Math.max(0, required - assigned.length);
+        openPool.slice(0, slotsNeeded).forEach((engineerId) => {
+          assigned.push(engineerId);
+          dayAssigned.add(engineerId);
+        });
+        return assigned;
+      };
+
+      const morningRequired = Math.max(1, dayAssignments.Morning.length || 1);
+      const eveningRequired = 1;
+      const nightRequired = 1;
+
+      const morningEngineers = fillShift("Morning", morningRequired, dayAssignments.Morning);
+      const eveningEngineers = fillShift("Evening", eveningRequired, dayAssignments.Evening);
+      const nightEngineers = fillShift("Night", nightRequired, dayAssignments.Night);
+      const allAssigned = Array.from(
+        new Set([...morningEngineers, ...eveningEngineers, ...nightEngineers]),
+      );
+      const offEngineers = available.filter((engineerId) => !allAssigned.includes(engineerId));
+
+      if (allAssigned.length < morningRequired + eveningRequired + nightRequired) {
+        dayWarnings.push(
+          "Coverage may be incomplete because there are not enough available engineers.",
+        );
+      }
+
+      const coverageStatus: Shift["coverageStatus"] =
+        morningEngineers.length >= morningRequired &&
+        eveningEngineers.length >= eveningRequired &&
+        nightEngineers.length >= nightRequired
+          ? "Covered"
+          : "Understaffed";
+
+      const dayEntry: Shift[] = [
+        {
+          date,
+          type: "Morning",
+          engineers: morningEngineers,
+          shiftLead: morningEngineers[0] || undefined,
+          coverageStatus,
+          notes: dayAssignments.Morning.length
+            ? "Fixed and rotated morning coverage"
+            : "Generated roster draft",
+          status: "Draft",
+          warnings: dayWarnings.length ? [...new Set(dayWarnings)] : ["No warnings"],
+        },
+        {
+          date,
+          type: "Evening",
+          engineers: eveningEngineers,
+          shiftLead: eveningEngineers[0] || undefined,
+          coverageStatus,
+          notes: "Generated roster draft",
+          status: "Draft",
+          warnings: dayWarnings.length ? [...new Set(dayWarnings)] : ["No warnings"],
+        },
+        {
+          date,
+          type: "Night",
+          engineers: nightEngineers,
+          shiftLead: nightEngineers[0] || undefined,
+          coverageStatus,
+          notes: "Generated roster draft",
+          status: "Draft",
+          warnings: dayWarnings.length ? [...new Set(dayWarnings)] : ["No warnings"],
+        },
+      ];
+
+      generated.push(...dayEntry);
+      previousNightWorkers = new Set(nightEngineers);
+      cursor.setDate(cursor.getDate() + 1);
+
+      if (offEngineers.length) {
+        dayEntry[0].notes = `${dayEntry[0].notes} • Off: ${offEngineers
+          .map((id) => userById(id))
+          .filter(Boolean)
+          .join(", ")}`;
+      }
+    }
+
+    const persisted = generated.map((shift) => ({
+      ...shift,
+      warnings: shift.warnings?.filter((warning) => warning !== "No warnings"),
+    }));
+
+    shiftService.importShifts(user.id, persisted);
+    setGeneratedRoster(persisted);
+    setRows(shiftService.listSchedule());
+    setBuilderOpen(false);
+    toast.success(`Auto-generated roster for ${persisted.length} shift slots.`);
+  };
+
+  const publishGeneratedRoster = () => {
+    if (!user || !generatedRoster.length) {
+      toast.error("Generate a roster before publishing.");
+      return;
+    }
+    const updated = generatedRoster.map((shift) => ({ ...shift, status: "Published" as const }));
+    shiftService.importShifts(user.id, updated);
+    setGeneratedRoster(updated);
+    setRows(shiftService.listSchedule());
+    toast.success("Generated roster published to the live shift board.");
+  };
+
+  const publishRow = (shift: Shift) => {
+    if (!user || !canGenerateRoster) return;
+    const updated = {
+      ...shift,
+      status: "Published" as const,
+      coverageStatus: shift.coverageStatus ?? "Covered",
+    };
+    shiftService.updateShift(shift.date, shift.type, user.id, {
+      engineers: updated.engineers,
+      shiftLead: updated.shiftLead,
+      coverageStatus: updated.coverageStatus,
+      notes: updated.notes,
+    });
+    setRows(shiftService.listSchedule());
+    toast.success(`${shift.date} ${shift.type} published`);
+  };
+
+  const deleteRow = (shift: Shift) => {
+    if (!user || !canGenerateRoster) return;
+    shiftService.deleteShift(shift.date, shift.type, user.id);
+    setRows(shiftService.listSchedule());
+    setGeneratedRoster((current) =>
+      current.filter((item) => !(item.date === shift.date && item.type === shift.type)),
+    );
+    toast.success(`${shift.date} ${shift.type} removed from the roster`);
+  };
 
   const buildRosterPreview = () => {
     const start = new Date(`${builderForm.startDate}T00:00:00`);
@@ -193,6 +515,8 @@ function ShiftsPage() {
           shiftLead: engineers[0] || builderForm.mandatoryEngineer || undefined,
           coverageStatus,
           notes: builderForm.reason || "Generated schedule preview",
+          status: "Draft",
+          warnings: [coverageStatus === "Covered" ? "No warnings" : "Below required staffing"],
         };
         preview.push(shift);
       });
@@ -200,18 +524,22 @@ function ShiftsPage() {
     }
 
     setGeneratedRoster(preview);
+    setRows((current) => {
+      const next = [...current];
+      preview.forEach((shift) => {
+        const existingIndex = next.findIndex(
+          (row) => row.date === shift.date && row.type === shift.type,
+        );
+        if (existingIndex >= 0) {
+          next[existingIndex] = { ...shift, status: "Draft" };
+        } else {
+          next.push({ ...shift, status: "Draft" });
+        }
+      });
+      return next;
+    });
     setBuilderOpen(false);
     toast.success(`Roster preview generated for ${preview.length} shifts.`);
-  };
-
-  const publishGeneratedRoster = () => {
-    if (!user || !generatedRoster.length) {
-      toast.error("Generate a roster preview before publishing.");
-      return;
-    }
-    shiftService.importShifts(user.id, generatedRoster);
-    setRows(shiftService.listSchedule());
-    toast.success("Generated roster published to the live shift board.");
   };
 
   const openEditor = (shift: Shift, mode: EditorMode) => {
@@ -288,19 +616,255 @@ function ShiftsPage() {
 
       {canGenerateRoster ? (
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-primary/80">
-                Schedule Builder
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-primary/80">
+                  Schedule Builder
+                </div>
+                <h2 className="mt-1 text-lg font-semibold text-foreground">Auto Generate Roster</h2>
               </div>
-              <h2 className="mt-1 text-lg font-semibold text-foreground">Shift Roster</h2>
             </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Start Date
+                </span>
+                <input
+                  type="date"
+                  value={autoGenerateForm.startDate}
+                  onChange={(event) =>
+                    setAutoGenerateForm({ ...autoGenerateForm, startDate: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  End Date
+                </span>
+                <input
+                  type="date"
+                  value={autoGenerateForm.endDate}
+                  onChange={(event) =>
+                    setAutoGenerateForm({ ...autoGenerateForm, endDate: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Engineer
+                </span>
+                <select
+                  value={fixedRuleForm.engineerId}
+                  onChange={(event) =>
+                    setFixedRuleForm({ ...fixedRuleForm, engineerId: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                >
+                  {activeEngineers.map((engineer) => (
+                    <option key={engineer.id} value={engineer.id}>
+                      {engineer.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Shift
+                </span>
+                <select
+                  value={fixedRuleForm.shiftType}
+                  onChange={(event) =>
+                    setFixedRuleForm({
+                      ...fixedRuleForm,
+                      shiftType: event.target.value as ShiftType,
+                    })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                >
+                  {(["Morning", "Evening", "Night"] as ShiftType[]).map((shift) => (
+                    <option key={shift} value={shift}>
+                      {shift}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Start date
+                </span>
+                <input
+                  type="date"
+                  value={fixedRuleForm.startDate}
+                  onChange={(event) =>
+                    setFixedRuleForm({ ...fixedRuleForm, startDate: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                />
+              </label>
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  End date
+                </span>
+                <input
+                  type="date"
+                  value={fixedRuleForm.endDate}
+                  onChange={(event) =>
+                    setFixedRuleForm({ ...fixedRuleForm, endDate: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label className="text-sm md:col-span-2 xl:col-span-2">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Reason
+                </span>
+                <input
+                  value={fixedRuleForm.reason}
+                  onChange={(event) =>
+                    setFixedRuleForm({ ...fixedRuleForm, reason: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Mandatory morning coverage"
+                />
+              </label>
+              <div className="flex items-end">
+                <button
+                  onClick={() => {
+                    if (
+                      !fixedRuleForm.engineerId ||
+                      !fixedRuleForm.startDate ||
+                      !fixedRuleForm.endDate
+                    ) {
+                      toast.error("Complete the fixed shift rule before adding it.");
+                      return;
+                    }
+                    const nextRule: FixedShiftRule = {
+                      id: `${fixedRuleForm.engineerId}-${fixedRuleForm.shiftType}-${fixedRuleForm.startDate}-${fixedRuleForm.endDate}`,
+                      engineerId: fixedRuleForm.engineerId,
+                      shiftType: fixedRuleForm.shiftType,
+                      startDate: fixedRuleForm.startDate,
+                      endDate: fixedRuleForm.endDate,
+                      reason: fixedRuleForm.reason.trim() || "Mandatory coverage",
+                    };
+                    setAutoGenerateForm((current) => ({
+                      ...current,
+                      fixedShiftRules: [
+                        ...current.fixedShiftRules.filter(
+                          (rule) =>
+                            !(
+                              rule.engineerId === fixedRuleForm.engineerId &&
+                              rule.shiftType === fixedRuleForm.shiftType &&
+                              rule.startDate === fixedRuleForm.startDate &&
+                              rule.endDate === fixedRuleForm.endDate
+                            ),
+                        ),
+                        nextRule,
+                      ],
+                    }));
+                    setFixedRuleForm({
+                      engineerId: activeEngineers[0]?.id ?? "",
+                      shiftType: "Morning",
+                      startDate: autoGenerateForm.startDate,
+                      endDate: autoGenerateForm.startDate,
+                      reason: "Mandatory coverage",
+                    });
+                    toast.success("Fixed shift rule added.");
+                  }}
+                  className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+                >
+                  Add Rule
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Fixed Shift Assignments
+              </div>
+              {autoGenerateForm.fixedShiftRules.length ? (
+                <div className="space-y-2">
+                  {autoGenerateForm.fixedShiftRules.map((rule) => (
+                    <div
+                      key={rule.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    >
+                      <span>
+                        {userById(rule.engineerId)} | {rule.shiftType} | {rule.startDate} -{" "}
+                        {rule.endDate} | {rule.reason}
+                      </span>
+                      <button
+                        onClick={() =>
+                          setAutoGenerateForm((current) => ({
+                            ...current,
+                            fixedShiftRules: current.fixedShiftRules.filter(
+                              (item) => item.id !== rule.id,
+                            ),
+                          }))
+                        }
+                        className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border bg-background px-3 py-2 text-sm text-muted-foreground">
+                  No fixed rules added.
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Unavailable / Excluded Engineers
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {activeEngineers.map((engineer) => {
+                  const checked = autoGenerateForm.excludedEngineers.includes(engineer.id);
+                  return (
+                    <label
+                      key={engineer.id}
+                      className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setAutoGenerateForm((current) => ({
+                            ...current,
+                            excludedEngineers: checked
+                              ? current.excludedEngineers.filter((id) => id !== engineer.id)
+                              : [...current.excludedEngineers, engineer.id],
+                          }))
+                        }
+                      />
+                      {engineer.name}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => setBuilderOpen(true)}
+                onClick={generateRosterRows}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
-                <Wand2 className="h-4 w-4" /> Generate Roster
+                <Wand2 className="h-4 w-4" /> Auto Generate Roster
+              </button>
+              <button
+                onClick={() => setBuilderOpen(true)}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-primary hover:bg-secondary/80"
+              >
+                <Wand2 className="h-4 w-4" /> Advanced Builder
               </button>
               <button
                 onClick={() => {
@@ -333,6 +897,38 @@ function ShiftsPage() {
           </div>
         </div>
       ) : null}
+
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+        {user?.role === "engineer" || user?.role === "shift-lead" ? <ShiftClockCard /> : null}
+        <KpiCard
+          label="Availability"
+          value={`${availabilitySummary.available}/${availabilitySummary.total}`}
+          sub="available engineers available for rotation"
+          icon={UserPlus}
+          tone="success"
+        />
+        <KpiCard
+          label="External Activity"
+          value={availabilitySummary.external}
+          sub="not in active roster rotation"
+          icon={Moon}
+          tone="warning"
+        />
+        <KpiCard
+          label="Emergency Leave"
+          value={availabilitySummary.emergency}
+          sub="requires human review"
+          icon={UserMinus}
+          tone="critical"
+        />
+        <KpiCard
+          label="Needs Review"
+          value={attentionCount}
+          sub="Understaffed, pending or conflict"
+          icon={Filter}
+          tone={attentionCount ? "warning" : "success"}
+        />
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
         {user?.role === "engineer" || user?.role === "shift-lead" ? <ShiftClockCard /> : null}
@@ -531,16 +1127,28 @@ function ShiftsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <StatusBadge
-                          status={coverageStatus === "Covered" ? "Published" : "Pending"}
+                          status={coverageStatus === "Covered" ? "Draft" : "Draft"}
                           tone={coverageStatus === "Covered" ? "success" : "warning"}
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 flex gap-2">
                         <button
                           onClick={() => publishGeneratedRoster()}
                           className="rounded-md border border-border bg-secondary px-2 py-1 text-xs font-medium text-primary hover:bg-secondary/80"
                         >
                           Publish
+                        </button>
+                        <button
+                          onClick={() => {
+                            const row = generatedRoster
+                              .filter((item) => item.date === date)
+                              .find((item) => item.type === "Morning");
+                            if (row) deleteRow(row);
+                          }}
+                          className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                          aria-label={`Delete roster for ${date}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -632,96 +1240,112 @@ function ShiftsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {visibleRows.map((shift) => {
-                const isCurrent = shift.date === today && shift.type === currentShiftType;
-                const isOwnShift = !!user && shift.engineers.includes(user.id);
+              {groupedVisibleRows.map((group) => {
+                const firstShift = group.shifts[0];
+                const isCurrent =
+                  firstShift && firstShift.date === today && firstShift.type === currentShiftType;
+                const isOwnShift = !!user && group.allEngineers.includes(user.id);
                 return (
-                  <tr
-                    key={`${shift.date}-${shift.type}`}
-                    className={isCurrent ? "bg-primary/5" : "hover:bg-muted/30"}
-                  >
+                  <tr key={group.date} className={isCurrent ? "bg-primary/5" : "hover:bg-muted/30"}>
                     <td className="px-4 py-3 font-medium">
                       <div className="flex items-center gap-2">
-                        {shift.date}
+                        {group.date}
                         {isCurrent ? <span className="text-xs text-primary">Current</span> : null}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {dayName(shift.date)}
-                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{group.day}</td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5">
-                        <ShiftIcon shift={shift.type} />
-                        {shift.type}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        {group.shifts.map((shift) => (
+                          <span
+                            key={`${group.date}-${shift.type}`}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-0.5 text-[11px]"
+                          >
+                            <ShiftIcon shift={shift.type} />
+                            {shift.type}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1.5">
-                        {shift.engineers.map((id) => (
-                          <span key={id} className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                        {group.allEngineers.map((id) => (
+                          <span
+                            key={`${group.date}-${id}`}
+                            className="rounded-full bg-muted px-2 py-0.5 text-xs"
+                          >
                             {userById(id).split(" ")[0]}
                           </span>
                         ))}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs">
-                      {shift.shiftLead ? userById(shift.shiftLead) : "Not set"}
+                      <div className="flex flex-col gap-1">{group.combinedLeads}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={shift.coverageStatus ?? "Pending Update"} />
-                      {shift.coverageStatus === "Conflict" ? (
-                        <div className="mt-1 text-[11px] text-critical">
-                          Review duplicate assignment
-                        </div>
-                      ) : null}
+                      <StatusBadge status={group.coverageStatus} />
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs">
-                      <span className="line-clamp-2">{shift.notes || "No notes added"}</span>
+                      <span className="line-clamp-2">{group.notes}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-0.5">
-                        <IconBtn
-                          label="View shift details"
-                          icon={Eye}
-                          onClick={() => openEditor(shift, "view")}
-                        />
-                        {canEditRoster ? (
+                        {firstShift ? (
                           <>
                             <IconBtn
-                              label="Edit shift assignment"
-                              icon={Edit3}
-                              onClick={() => openEditor(shift, "edit")}
+                              label="View shift details"
+                              icon={Eye}
+                              onClick={() => openEditor(firstShift, "view")}
                             />
-                            <IconBtn
-                              label="Add engineer to shift"
-                              icon={UserPlus}
-                              onClick={() => openEditor(shift, "add")}
-                            />
-                            <IconBtn
-                              label="Remove engineer from shift"
-                              icon={UserMinus}
-                              onClick={() => openEditor(shift, "remove")}
-                            />
-                            <IconBtn
-                              label="Add note"
-                              icon={MessageSquare}
-                              onClick={() => openEditor(shift, "note")}
-                            />
+                            {canEditRoster ? (
+                              <>
+                                <IconBtn
+                                  label="Edit shift assignment"
+                                  icon={Edit3}
+                                  onClick={() => openEditor(firstShift, "edit")}
+                                />
+                                <IconBtn
+                                  label="Add engineer to shift"
+                                  icon={UserPlus}
+                                  onClick={() => openEditor(firstShift, "add")}
+                                />
+                                <IconBtn
+                                  label="Remove engineer from shift"
+                                  icon={UserMinus}
+                                  onClick={() => openEditor(firstShift, "remove")}
+                                />
+                                <IconBtn
+                                  label="Add note"
+                                  icon={MessageSquare}
+                                  onClick={() => openEditor(firstShift, "note")}
+                                />
+                                <IconBtn
+                                  label="Publish shift"
+                                  icon={ClipboardCheck}
+                                  onClick={() => publishRow(firstShift)}
+                                />
+                                <IconBtn
+                                  label="Delete shift"
+                                  icon={Trash2}
+                                  onClick={() => deleteRow(firstShift)}
+                                />
+                              </>
+                            ) : null}
+                            {canSubmitRequest && isOwnShift ? (
+                              <IconBtn
+                                label="Submit shift request"
+                                icon={Repeat}
+                                onClick={() => openRequest(firstShift)}
+                              />
+                            ) : null}
                           </>
-                        ) : null}
-                        {canSubmitRequest && isOwnShift ? (
-                          <IconBtn
-                            label="Submit shift request"
-                            icon={Repeat}
-                            onClick={() => openRequest(shift)}
-                          />
                         ) : null}
                       </div>
                     </td>
                   </tr>
                 );
               })}
-              {!visibleRows.length ? (
+              {!groupedVisibleRows.length ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-10">
                     <EmptyState
