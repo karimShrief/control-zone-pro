@@ -23,13 +23,14 @@ function LoginPage() {
     else setError("Invalid credentials. Try one of the bootstrap accounts below.");
   };
 
-  const bootstrapAccounts = [
-    { label: "Engineer", username: "engineer" },
-    { label: "Shift Lead", username: "shiftlead" },
-    { label: "Manager", username: "manager" },
-    { label: "Executive", username: "exec" },
-    { label: "Admin", username: "admin" },
-  ];
+const bootstrapAccounts = [
+  { label: "Manager", username: "manager" },
+  { label: "Karim - Engineer", username: "karim" },
+  { label: "Ranko - Engineer", username: "ranko" },
+  { label: "Shift Lead", username: "shiftlead" },
+  { label: "Executive", username: "exec" },
+  { label: "Admin", username: "admin" },
+];
 
   return (
     <div className="min-h-screen w-full flex bg-sidebar text-sidebar-foreground">
@@ -118,7 +119,7 @@ function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="mt-1.5 w-full rounded-md border border-input bg-card px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="e.g. engineer"
+                placeholder="e.g. karim"
                 autoFocus
               />
             </div>
