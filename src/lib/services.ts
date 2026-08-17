@@ -3,6 +3,7 @@ import {
   coverageRules,
   dashboardWidgetSettings,
   handoverPoints,
+  handoverComments,
   handoverTemplates,
   importTemplateDefinitions,
   incidentRules,
@@ -178,9 +179,68 @@ function hydrateMockIncidents() {
   }
 }
 
+function hydrateMockProjects() {
+  if (typeof window === "undefined") return;
+  const storedProjects = readMockStorage<typeof projects>("ops-command-mock-projects", []);
+  const storedProjectTasks = readMockStorage<typeof projectTasks>(
+    "ops-command-mock-project-tasks",
+    [],
+  );
+
+  if (storedProjects.length) {
+    projects.splice(0, projects.length, ...storedProjects);
+  } else {
+    writeMockStorage("ops-command-mock-projects", projects);
+  }
+
+  if (storedProjectTasks.length) {
+    projectTasks.splice(0, projectTasks.length, ...storedProjectTasks);
+  } else {
+    writeMockStorage("ops-command-mock-project-tasks", projectTasks);
+  }
+}
+
+function persistMockProjects() {
+  if (typeof window === "undefined") return;
+  writeMockStorage("ops-command-mock-projects", projects);
+  writeMockStorage("ops-command-mock-project-tasks", projectTasks);
+}
+
+function hydrateMockHandovers() {
+  if (typeof window === "undefined") return;
+  const storedHandovers = readMockStorage<typeof handoverPoints>(
+    "ops-command-mock-handovers",
+    [],
+  );
+  const storedComments = readMockStorage<typeof handoverComments>(
+    "ops-command-mock-handover-comments",
+    [],
+  );
+
+  if (storedHandovers.length) {
+    handoverPoints.splice(0, handoverPoints.length, ...storedHandovers);
+  } else {
+    writeMockStorage("ops-command-mock-handovers", handoverPoints);
+  }
+
+  if (storedComments.length) {
+    handoverComments.splice(0, handoverComments.length, ...storedComments);
+  } else {
+    writeMockStorage("ops-command-mock-handover-comments", handoverComments);
+  }
+}
+
+function persistMockHandovers() {
+  if (typeof window === "undefined") return;
+  writeMockStorage("ops-command-mock-handovers", handoverPoints);
+  writeMockStorage("ops-command-mock-handover-comments", handoverComments);
+}
+
 hydrateMockTasks();
 hydrateMockShifts();
 hydrateMockIncidents();
+hydrateMockProjects();
+hydrateMockHandovers();
 
 function adminActor(actorId: string | undefined) {
   return actorId ?? "system";
@@ -1448,11 +1508,22 @@ function recalculateProjectCompletion(projectId: string) {
 }
 
 export const projectService = {
-  list: () => [...projects],
-  get: (projectId: string) => projects.find((project) => project.id === projectId) ?? null,
-  listTasks: (projectId?: string) =>
-    projectId ? projectTasks.filter((task) => task.projectId === projectId) : [...projectTasks],
+  list: () => {
+    hydrateMockProjects();
+    return [...projects];
+  },
+  get: (projectId: string) => {
+    hydrateMockProjects();
+    return projects.find((project) => project.id === projectId) ?? null;
+  },
+  listTasks: (projectId?: string) => {
+    hydrateMockProjects();
+    return projectId
+      ? projectTasks.filter((task) => task.projectId === projectId)
+      : [...projectTasks];
+  },
   createFromTemplate: (actorId: string, templateId: string) => {
+    hydrateMockProjects();
     const template = projectTemplates.find((item) => item.id === templateId && item.active);
     if (!template) return null;
     const now = new Date();
@@ -1497,6 +1568,7 @@ export const projectService = {
         evidence: 0,
       });
     });
+    persistMockProjects();
     recordAuditLog({
       actorId,
       action: "project.generated-from-template",
@@ -1507,6 +1579,7 @@ export const projectService = {
     return project;
   },
   createTask: (projectId: string, actorId: string): ProjectTask | null => {
+    hydrateMockProjects();
     const project = projects.find((item) => item.id === projectId);
     if (!project) return null;
     const task: ProjectTask = {
@@ -1529,6 +1602,7 @@ export const projectService = {
     };
     projectTasks.push(task);
     recalculateProjectCompletion(projectId);
+    persistMockProjects();
     recordAuditLog({
       actorId,
       action: "project-task.create",
@@ -1539,6 +1613,7 @@ export const projectService = {
     return task;
   },
   updateTaskProgress: (taskId: string, completion: number, actorId: string) => {
+    hydrateMockProjects();
     const task = projectTasks.find((item) => item.id === taskId);
     if (!task) return null;
     const nextCompletion = Math.max(0, Math.min(100, completion));
@@ -1548,6 +1623,7 @@ export const projectService = {
     task.lastUpdatedBy = actorId;
     task.latestUpdate = `${userById(actorId)} updated progress to ${nextCompletion}% and set status to ${task.status}.`;
     const project = recalculateProjectCompletion(task.projectId);
+    persistMockProjects();
     recordAuditLog({
       actorId,
       action: "project-task.progress.update",
@@ -1564,12 +1640,14 @@ export const projectService = {
     return task;
   },
   updateTaskAssignee: (taskId: string, assigneeId: string | null, actorId: string) => {
+    hydrateMockProjects();
     const task = projectTasks.find((item) => item.id === taskId);
     if (!task) return null;
     const before = { assignee: task.assignee };
     task.assignee = assigneeId;
     task.lastUpdatedBy = actorId;
     task.latestUpdate = `${userById(actorId)} assigned this task to ${assigneeId ? userById(assigneeId) : "unassigned"}.`;
+    persistMockProjects();
     recordAuditLog({
       actorId,
       action: "project-task.assign",
@@ -2066,16 +2144,22 @@ export const shiftRequestService = {
 };
 
 export const handoverService = {
-  list: () => [...handoverPoints],
-  listComments: (handoverId: string) =>
-    [...handoverComments]
+  list: () => {
+    hydrateMockHandovers();
+    return [...handoverPoints];
+  },
+  listComments: (handoverId: string) => {
+    hydrateMockHandovers();
+    return [...handoverComments]
       .filter((comment) => comment.handoverId === handoverId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
   addComment: (
     actorId: string,
     handoverId: string,
     input: Pick<HandoverComment, "commentText" | "handoverPointId" | "visibility">,
   ) => {
+    hydrateMockHandovers();
     const actor = users.find((user) => user.id === actorId);
     const comment: HandoverComment = {
       id: `HC-${handoverComments.length + 1}`,
@@ -2088,6 +2172,7 @@ export const handoverService = {
       visibility: input.visibility ?? "Team",
     };
     handoverComments.unshift(comment);
+    persistMockHandovers();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "handover.comment.added",
@@ -2107,6 +2192,7 @@ export const handoverService = {
         > &
           Partial<Pick<HandoverPoint, "status" | "relatedRef" | "evidence">>),
   ) => {
+    hydrateMockHandovers();
     const input =
       typeof shiftOrInput === "string"
         ? {
@@ -2142,6 +2228,7 @@ export const handoverService = {
       audit: "Pending",
     };
     handoverPoints.unshift(point);
+    persistMockHandovers();
     recordAuditLog({
       actorId,
       action: "handover.create",
@@ -2152,11 +2239,13 @@ export const handoverService = {
     return point;
   },
   updateAudit: (handoverId: string, audit: HandoverPoint["audit"], actorId: string) => {
+    hydrateMockHandovers();
     const handover = handoverPoints.find((item) => item.id === handoverId);
     if (!handover) return null;
     const before = { audit: handover.audit };
     handover.audit = audit;
     handover.acknowledged = audit === "Approved" ? true : handover.acknowledged;
+    persistMockHandovers();
     recordAuditLog({
       actorId,
       action: "handover.audit.update",
