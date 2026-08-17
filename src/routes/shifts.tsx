@@ -70,6 +70,240 @@ const REQUEST_TYPES: ShiftRequest["type"][] = [
   "Absence Note",
 ];
 
+const CURRENT_ROSTER_ENGINEER_MAP = {
+  karim: "u6",
+  fareed: "u7",
+  ranko: "u8",
+  shrief: "u9",
+  febin: "u10",
+  abuthahir: "u11",
+} as const;
+
+const CURRENT_AUGUST_MATRIX = [
+  {
+    engineerId: CURRENT_ROSTER_ENGINEER_MAP.fareed,
+    codes: [
+      "A",
+      "A",
+      "B",
+      "B",
+      "A",
+      "OFF",
+      "D",
+      "OFF",
+      "OFF",
+      "D",
+      "D",
+      "D",
+      "D",
+      "D",
+      "OFF",
+      "OFF",
+      "D",
+      "D",
+      "D",
+      "D",
+      "D",
+      "OFF",
+      "OFF",
+      "D",
+      "D",
+      "D",
+      "D",
+      "D",
+      "OFF",
+      "OFF",
+      "D",
+    ],
+  },
+  {
+    engineerId: CURRENT_ROSTER_ENGINEER_MAP.ranko,
+    codes: [
+      "OFF",
+      "OFF",
+      "D",
+      "D",
+      "D",
+      "D",
+      "D",
+      "OFF",
+      "OFF",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+    ],
+  },
+  {
+    engineerId: CURRENT_ROSTER_ENGINEER_MAP.shrief,
+    codes: [
+      "Leave",
+      "Leave",
+      "Leave",
+      "Leave",
+      "OFF",
+      "OFF",
+      "A",
+      "A",
+      "A",
+      "A",
+      "B",
+      "B",
+      "OFF",
+      "OFF",
+      "A",
+      "A",
+      "A",
+      "A",
+      "B",
+      "B",
+      "OFF",
+      "OFF",
+      "A",
+      "A",
+      "A",
+      "A",
+      "B",
+      "B",
+      "OFF",
+      "OFF",
+      "A",
+    ],
+  },
+  {
+    engineerId: CURRENT_ROSTER_ENGINEER_MAP.karim,
+    codes: [
+      "OFF",
+      "OFF",
+      "A",
+      "A",
+      "A",
+      "A",
+      "B",
+      "B",
+      "OFF",
+      "OFF",
+      "A",
+      "A",
+      "A",
+      "A",
+      "B",
+      "B",
+      "OFF",
+      "OFF",
+      "A",
+      "A",
+      "A",
+      "A",
+      "B",
+      "B",
+      "OFF",
+      "OFF",
+      "A",
+      "A",
+      "A",
+      "A",
+      "B",
+    ],
+  },
+  {
+    engineerId: CURRENT_ROSTER_ENGINEER_MAP.febin,
+    codes: [
+      "B",
+      "B",
+      "C",
+      "C",
+      "C",
+      "C",
+      "OFF",
+      "OFF",
+      "B",
+      "B",
+      "C",
+      "C",
+      "C",
+      "C",
+      "OFF",
+      "OFF",
+      "B",
+      "B",
+      "C",
+      "C",
+      "C",
+      "C",
+      "OFF",
+      "OFF",
+      "B",
+      "B",
+      "C",
+      "C",
+      "C",
+      "C",
+      "OFF",
+    ],
+  },
+  {
+    engineerId: CURRENT_ROSTER_ENGINEER_MAP.abuthahir,
+    codes: [
+      "C",
+      "C",
+      "OFF",
+      "OFF",
+      "B",
+      "B",
+      "C",
+      "C",
+      "C",
+      "C",
+      "OFF",
+      "OFF",
+      "B",
+      "B",
+      "C",
+      "C",
+      "C",
+      "C",
+      "OFF",
+      "OFF",
+      "B",
+      "B",
+      "C",
+      "C",
+      "C",
+      "C",
+      "OFF",
+      "OFF",
+      "B",
+      "B",
+      "C",
+    ],
+  },
+];
+
+function codeToShift(code: string): ShiftType | null {
+  if (code === "A") return "Morning";
+  if (code === "B") return "Evening";
+  if (code === "C") return "Night";
+  return null;
+}
 function ShiftsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -97,6 +331,7 @@ function ShiftsPage() {
   );
   const [requestReason, setRequestReason] = useState("");
   const [builderOpen, setBuilderOpen] = useState(false);
+
   const [generatedRoster, setGeneratedRoster] = useState<Shift[]>([]);
   const [fixedRuleForm, setFixedRuleForm] = useState({
     engineerId: activeEngineers[0]?.id ?? "",
@@ -227,198 +462,253 @@ function ShiftsPage() {
       return;
     }
 
-    const start = new Date(`${autoGenerateForm.startDate}T00:00:00`);
-    const end = new Date(`${autoGenerateForm.endDate}T00:00:00`);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
-      toast.error("Select a valid date range before generating the roster.");
-      return;
-    }
-
-    const available = activeEngineers
-      .filter((engineer) => !autoGenerateForm.excludedEngineers.includes(engineer.id))
-      .filter((engineer) => {
-        const availability = engineer.availability ?? "Available";
-        return !["Emergency Leave", "Off Duty", "On Leave"].includes(availability);
-      })
-      .map((engineer) => engineer.id);
-
-    if (!available.length) {
-      toast.error("Coverage may be incomplete because there are not enough available engineers.");
-      return;
-    }
-
-    const fixedRules = [...autoGenerateForm.fixedShiftRules].sort((a, b) =>
-      a.startDate.localeCompare(b.startDate),
-    );
-    const warningsByDate = new Map<string, string[]>();
-    const fixedAssignmentsByDate = new Map<string, Record<ShiftType, string[]>>();
-
-    fixedRules.forEach((rule) => {
-      const ruleStart = new Date(`${rule.startDate}T00:00:00`);
-      const ruleEnd = new Date(`${rule.endDate}T00:00:00`);
-      if (
-        Number.isNaN(ruleStart.getTime()) ||
-        Number.isNaN(ruleEnd.getTime()) ||
-        ruleEnd < ruleStart
-      ) {
-        return;
-      }
-
-      for (
-        let cursor = new Date(ruleStart);
-        cursor <= ruleEnd;
-        cursor.setDate(cursor.getDate() + 1)
-      ) {
-        const date = cursor.toISOString().slice(0, 10);
-        if (date < autoGenerateForm.startDate || date > autoGenerateForm.endDate) continue;
-
-        const dayAssignments = fixedAssignmentsByDate.get(date) ?? {
-          Morning: [],
-          Evening: [],
-          Night: [],
-        };
-
-        const engineerName = userById(rule.engineerId)?.name ?? "Engineer";
-        if (autoGenerateForm.excludedEngineers.includes(rule.engineerId)) {
-          const list = warningsByDate.get(date) ?? [];
-          list.push(`${engineerName} is fixed to ${rule.shiftType} but is unavailable.`);
-          warningsByDate.set(date, list);
-          continue;
-        }
-
-        const existingForEngineer = Object.values(dayAssignments).some((shiftAssignments) =>
-          shiftAssignments.includes(rule.engineerId),
-        );
-        if (existingForEngineer) {
-          const list = warningsByDate.get(date) ?? [];
-          list.push(`${engineerName} has conflicting fixed shift assignments.`);
-          warningsByDate.set(date, list);
-          continue;
-        }
-
-        dayAssignments[rule.shiftType].push(rule.engineerId);
-        fixedAssignmentsByDate.set(date, dayAssignments);
-      }
-    });
-
-    const generated: Shift[] = [];
-    const cursor = new Date(start);
-    let previousNightWorkers = new Set<string>();
     const shiftOrder: ShiftType[] = ["Morning", "Evening", "Night"];
+    const generated: Shift[] = [];
+    const dayRangeStart = autoGenerateForm.startDate || "2026-08-01";
+    const dayRangeEnd = autoGenerateForm.endDate || "2026-08-31";
 
-    while (cursor <= end) {
-      const date = cursor.toISOString().slice(0, 10);
-      const fixedDayAssignments = fixedAssignmentsByDate.get(date) ?? {
+    const parseDate = (date: string) => new Date(`${date}T12:00:00`);
+    const isWeekend = (date: string) => {
+      const day = parseDate(date).getDay();
+      return day === 0 || day === 6;
+    };
+    const nextDate = (date: string) => {
+      const cursor = parseDate(date);
+      cursor.setDate(cursor.getDate() + 1);
+      return cursor.toISOString().slice(0, 10);
+    };
+
+    const fixedWeekdayRules: FixedShiftRule[] = autoGenerateForm.fixedShiftRules.map((rule) => ({
+      ...rule,
+      startDate: rule.startDate || dayRangeStart,
+      endDate: rule.endDate || dayRangeEnd,
+    }));
+
+    const excludedEngineerIds = new Set(autoGenerateForm.excludedEngineers);
+    const activeEngineerIds = activeEngineers
+      .map((engineer) => engineer.id)
+      .filter((engineerId) => !excludedEngineerIds.has(engineerId));
+
+    const regularRotationOffsets: Record<string, number> = {
+      [CURRENT_ROSTER_ENGINEER_MAP.karim]: 0,
+      [CURRENT_ROSTER_ENGINEER_MAP.fareed]: 2,
+      [CURRENT_ROSTER_ENGINEER_MAP.ranko]: 4,
+      [CURRENT_ROSTER_ENGINEER_MAP.shrief]: 6,
+      [CURRENT_ROSTER_ENGINEER_MAP.febin]: 0,
+      [CURRENT_ROSTER_ENGINEER_MAP.abuthahir]: 2,
+    };
+
+    const regularCycle: Array<ShiftType | "OFF"> = [
+      "Morning",
+      "Morning",
+      "Evening",
+      "Evening",
+      "Night",
+      "Night",
+      "OFF",
+      "OFF",
+    ];
+
+    const appliesOnDate = (rule: FixedShiftRule, date: string) =>
+      date >= rule.startDate && date <= rule.endDate;
+
+    const fixedRulesForDate = (date: string) =>
+      fixedWeekdayRules.filter((rule) => appliesOnDate(rule, date));
+
+    const fixedEngineerIdsForDate = (date: string) =>
+      new Set(fixedRulesForDate(date).map((rule) => rule.engineerId));
+
+    const cycleShiftFor = (engineerId: string, dayIndex: number): ShiftType | "OFF" => {
+      const offset = regularRotationOffsets[engineerId] ?? 0;
+      return regularCycle[(dayIndex + offset) % regularCycle.length];
+    };
+
+    const isEligibleForShift = (engineerId: string, _shiftType: ShiftType) => {
+      return activeEngineerIds.includes(engineerId);
+    };
+
+    const assignmentCounts = new Map<string, number>();
+    activeEngineerIds.forEach((engineerId) => assignmentCounts.set(engineerId, 0));
+
+    const pushEngineer = (
+      assignments: Record<ShiftType, string[]>,
+      assignedToday: Set<string>,
+      shiftType: ShiftType,
+      engineerId: string,
+    ) => {
+      if (!isEligibleForShift(engineerId, shiftType)) return false;
+      if (assignedToday.has(engineerId)) return false;
+      assignments[shiftType].push(engineerId);
+      assignedToday.add(engineerId);
+      assignmentCounts.set(engineerId, (assignmentCounts.get(engineerId) ?? 0) + 1);
+      return true;
+    };
+
+    const chooseBalancedEngineer = (
+      candidates: string[],
+      assignedToday: Set<string>,
+      shiftType: ShiftType,
+      fixedEngineerIdsToday: Set<string>,
+    ) => {
+      return candidates
+        .filter((engineerId) => !fixedEngineerIdsToday.has(engineerId))
+        .filter((engineerId) => !assignedToday.has(engineerId))
+        .filter((engineerId) => isEligibleForShift(engineerId, shiftType))
+        .sort((left, right) => {
+          const countDelta = (assignmentCounts.get(left) ?? 0) - (assignmentCounts.get(right) ?? 0);
+          if (countDelta !== 0) return countDelta;
+          return activeEngineerIds.indexOf(left) - activeEngineerIds.indexOf(right);
+        })[0];
+    };
+
+    let cursor = dayRangeStart;
+    let dayIndex = 0;
+    while (cursor <= dayRangeEnd) {
+      const date = cursor;
+      const weekend = isWeekend(date);
+      const fixedRulesToday = fixedRulesForDate(date);
+      const fixedEngineerIdsToday = fixedEngineerIdsForDate(date);
+      const assignedToday = new Set<string>();
+
+      const assignments: Record<ShiftType, string[]> = {
         Morning: [],
         Evening: [],
         Night: [],
       };
-      const assignedByShift: Record<ShiftType, string[]> = {
-        Morning: [...fixedDayAssignments.Morning],
-        Evening: [...fixedDayAssignments.Evening],
-        Night: [...fixedDayAssignments.Night],
+      const warningsByShift: Record<ShiftType, string[]> = {
+        Morning: [],
+        Evening: [],
+        Night: [],
       };
-      const lockedEngineers = new Set(
-        Object.values(assignedByShift).flatMap((engineers) => engineers),
-      );
-      const allWarnings = warningsByDate.get(date) ?? [];
+      const candidatesByShift: Record<ShiftType, string[]> = {
+        Morning: [],
+        Evening: [],
+        Night: [],
+      };
 
-      for (const type of shiftOrder) {
-        if (type === "Morning" && assignedByShift.Morning.length === 0) {
-          const pool = available.filter(
-            (engineerId) =>
-              !lockedEngineers.has(engineerId) &&
-              !previousNightWorkers.has(engineerId) &&
-              !assignedByShift.Evening.includes(engineerId) &&
-              !assignedByShift.Night.includes(engineerId),
-          );
-          const selected = pool.slice(0, 1);
-          selected.forEach((engineerId) => {
-            assignedByShift.Morning.push(engineerId);
-            lockedEngineers.add(engineerId);
-          });
-        }
+      // 1) Build the normal rotation first for non-fixed engineers only.
+      // Fixed engineers are removed from the normal cycle while their rule applies,
+      // so their fixed assignment becomes extra weekday coverage instead of reshuffling everyone else.
+      activeEngineerIds.forEach((engineerId) => {
+        if (fixedEngineerIdsToday.has(engineerId)) return;
 
-        if (type === "Evening" && assignedByShift.Evening.length === 0) {
-          const pool = available.filter(
-            (engineerId) =>
-              !lockedEngineers.has(engineerId) &&
-              !assignedByShift.Morning.includes(engineerId) &&
-              !assignedByShift.Night.includes(engineerId),
-          );
-          const selected = pool.slice(0, 1);
-          selected.forEach((engineerId) => {
-            assignedByShift.Evening.push(engineerId);
-            lockedEngineers.add(engineerId);
-          });
-        }
+        const shiftType = cycleShiftFor(engineerId, dayIndex);
+        if (shiftType === "OFF") return;
+        if (!isEligibleForShift(engineerId, shiftType)) return;
+        candidatesByShift[shiftType].push(engineerId);
+      });
 
-        if (type === "Night" && assignedByShift.Night.length === 0) {
-          const pool = available.filter(
-            (engineerId) =>
-              !lockedEngineers.has(engineerId) &&
-              !assignedByShift.Morning.includes(engineerId) &&
-              !assignedByShift.Evening.includes(engineerId),
-          );
-          const selected = pool.slice(0, 1);
-          selected.forEach((engineerId) => {
-            assignedByShift.Night.push(engineerId);
-            lockedEngineers.add(engineerId);
-          });
-        }
-      }
+      candidatesByShift.Morning.forEach((engineerId) => {
+        pushEngineer(assignments, assignedToday, "Morning", engineerId);
+      });
 
-      const offEngineers = available.filter(
-        (engineerId) =>
-          !assignedByShift.Morning.includes(engineerId) &&
-          !assignedByShift.Evening.includes(engineerId) &&
-          !assignedByShift.Night.includes(engineerId),
-      );
-
-      const rowWarnings = [...allWarnings];
-      const fixedMorningNames = fixedDayAssignments.Morning.map((id) => userById(id)?.name).filter(
-        Boolean,
-      );
-      if (fixedMorningNames.length > 0) {
-        rowWarnings.push(
-          `${fixedMorningNames.join(", ")} is fixed to Morning, so normal off-day rotation was not fully applied.`,
+      (["Evening", "Night"] as ShiftType[]).forEach((shiftType) => {
+        const preferred = chooseBalancedEngineer(
+          candidatesByShift[shiftType],
+          assignedToday,
+          shiftType,
+          fixedEngineerIdsToday,
         );
-      }
+        if (preferred) pushEngineer(assignments, assignedToday, shiftType, preferred);
+      });
 
-      const dayEntry = shiftOrder.map((type) => ({
-        date,
-        type,
-        engineers: assignedByShift[type],
-        shiftLead: assignedByShift[type][0] ?? undefined,
-        coverageStatus: assignedByShift[type].length > 0 ? "Covered" : "Understaffed",
-        notes:
-          type === "Morning"
-            ? fixedDayAssignments.Morning.length
-              ? "Fixed morning coverage applied"
-              : "Generated roster draft"
-            : "Generated roster draft",
-        status: "Draft" as const,
-        warnings: rowWarnings.length ? [...new Set(rowWarnings)] : ["No warnings"],
-      }));
+      // 2) Overlay fixed rules after the regular rotation.
+      // Multiple fixed engineers can share the same fixed shift.
+      const fixedRuleSeenByEngineer = new Map<string, ShiftType>();
+      fixedRulesToday.forEach((rule) => {
+        const engineerName = userById(rule.engineerId);
+        const previousFixedShift = fixedRuleSeenByEngineer.get(rule.engineerId);
+        if (previousFixedShift && previousFixedShift !== rule.shiftType) {
+          warningsByShift[rule.shiftType].push(
+            `${engineerName} has conflicting fixed shift assignments.`,
+          );
+          return;
+        }
+        fixedRuleSeenByEngineer.set(rule.engineerId, rule.shiftType);
 
-      generated.push(...dayEntry);
-      previousNightWorkers = new Set(assignedByShift.Night);
-      cursor.setDate(cursor.getDate() + 1);
+        if (excludedEngineerIds.has(rule.engineerId)) {
+          warningsByShift[rule.shiftType].push(
+            `${engineerName} is fixed to ${rule.shiftType} but is unavailable.`,
+          );
+          return;
+        }
+
+        if (!activeEngineerIds.includes(rule.engineerId)) {
+          warningsByShift[rule.shiftType].push(
+            `${engineerName} is fixed to ${rule.shiftType} but is not shift eligible.`,
+          );
+          return;
+        }
+
+        if (weekend) return;
+
+        pushEngineer(assignments, assignedToday, rule.shiftType, rule.engineerId);
+      });
+
+      // 3) Only if Evening/Night became empty after fixed rules, adapt with remaining non-fixed engineers.
+      // This is coverage validation, not a backup assignment, so there is no backup wording in the UI.
+      (["Evening", "Night"] as ShiftType[]).forEach((shiftType) => {
+        if (assignments[shiftType].length > 0) return;
+        const adaptiveCandidates = activeEngineerIds.filter((engineerId) => {
+          if (fixedEngineerIdsToday.has(engineerId)) return false;
+          if (!isEligibleForShift(engineerId, shiftType)) return false;
+          return true;
+        });
+        const adaptive = chooseBalancedEngineer(
+          adaptiveCandidates,
+          assignedToday,
+          shiftType,
+          fixedEngineerIdsToday,
+        );
+        if (adaptive) pushEngineer(assignments, assignedToday, shiftType, adaptive);
+      });
+
+      shiftOrder.forEach((shiftType) => {
+        const engineers = Array.from(new Set(assignments[shiftType]));
+        const warnings = Array.from(new Set(warningsByShift[shiftType].filter(Boolean)));
+
+        if (!engineers.length) {
+          warnings.push(`No ${shiftType} coverage after applying fixed rules and rotation constraints.`);
+        }
+
+        generated.push({
+          date,
+          type: shiftType,
+          engineers,
+          shiftLead: engineers[0],
+          coverageStatus: engineers.length > 0 ? "Covered" : "Understaffed",
+          notes:
+            "Generated using normal 2M/2E/2N/2OFF rotation first, then fixed weekday overlay rules.",
+          status: "Draft",
+          warnings,
+        });
+      });
+
+      cursor = nextDate(cursor);
+      dayIndex += 1;
     }
 
-    const persisted = generated.map((shift) => ({
-      ...shift,
-      warnings: shift.warnings?.filter((warning) => warning !== "No warnings"),
-    }));
+    const persisted = generated.map((shift) => {
+      const engineers = Array.from(new Set(shift.engineers));
+      return {
+        ...shift,
+        engineers,
+        shiftLead:
+          shift.shiftLead && engineers.includes(shift.shiftLead) ? shift.shiftLead : engineers[0],
+        coverageStatus: engineers.length > 0 ? ("Covered" as const) : ("Understaffed" as const),
+        warnings: Array.from(new Set(shift.warnings?.filter(Boolean) ?? [])),
+      };
+    });
 
     shiftService.importShifts(user.id, persisted);
     setGeneratedRoster(persisted);
     setRows(shiftService.listSchedule());
     setBuilderOpen(false);
-    toast.success(`Auto-generated roster for ${persisted.length} shift slots.`);
+    toast.success("Roster generated with rotation-first fixed weekday overlay.");
   };
 
-  const publishGeneratedRoster = () => {
+  
+const publishGeneratedRoster = () => {
     if (!user || !generatedRoster.length) {
       toast.error("Generate a roster before publishing.");
       return;
@@ -856,10 +1146,15 @@ function ShiftsPage() {
                 <Wand2 className="h-4 w-4" /> Auto Generate Roster
               </button>
               <button
-                onClick={() => setBuilderOpen(true)}
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-secondary px-3 py-2 text-sm font-medium text-primary hover:bg-secondary/80"
+                onClick={() =>
+                  toast.info(
+                    "Advanced Builder is disabled for this demo. Use Auto Generate Roster with fixed weekday rules.",
+                  )
+                }
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm font-medium text-muted-foreground"
+                title="Advanced Builder is locked for this demo"
               >
-                <Wand2 className="h-4 w-4" /> Advanced Builder
+                <Wand2 className="h-4 w-4" /> Advanced Builder — Demo Locked
               </button>
               <button
                 onClick={() => {
@@ -1070,28 +1365,7 @@ function ShiftsPage() {
                   )
                     ? "Understaffed"
                     : "Covered";
-                  const warnings = byDate.flatMap((shift) => {
-                    const list: string[] = [];
-                    if (
-                      shift.engineers.length <
-                      (shift.type === "Morning"
-                        ? builderForm.morningMinimum
-                        : shift.type === "Evening"
-                          ? builderForm.eveningMinimum
-                          : builderForm.nightMinimum)
-                    ) {
-                      list.push(`${shift.type} below minimum`);
-                    }
-                    if (
-                      builderForm.mandatoryEngineer &&
-                      !shift.engineers.includes(builderForm.mandatoryEngineer) &&
-                      (builderForm.mandatoryShift === "Any" ||
-                        builderForm.mandatoryShift === shift.type)
-                    ) {
-                      list.push(`${userById(builderForm.mandatoryEngineer)} missing`);
-                    }
-                    return list;
-                  });
+                  const warnings = byDate.flatMap((shift) => shift.warnings ?? []);
                   return (
                     <tr key={date} className="hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{date}</td>

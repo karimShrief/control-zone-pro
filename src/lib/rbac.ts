@@ -92,6 +92,14 @@ export function canManageSops(user: User | null) {
   return !!user && ["manager", "admin"].includes(user.role);
 }
 
+export function canUploadSops(user: User | null) {
+  return !!user && !["engineer"].includes(user.role);
+}
+
+export function canCommentOnSops(user: User | null) {
+  return !!user && ["engineer", "shift-lead", "manager", "executive", "admin"].includes(user.role);
+}
+
 export function canViewImportCenter(user: User | null) {
   return !!user && ["shift-lead", "manager", "executive", "admin"].includes(user.role);
 }
