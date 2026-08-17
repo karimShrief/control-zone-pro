@@ -62,6 +62,11 @@ type FixedShiftRule = {
 };
 
 const SHIFT_ELIGIBLE_ENGINEER_IDS = ["u6", "u7", "u8", "u9", "u10", "u11"];
+const SHIFT_DISPLAY_ORDER: ShiftType[] = ["Morning", "Evening", "Night"];
+
+function shiftSortValue(type: ShiftType) {
+  return SHIFT_DISPLAY_ORDER.indexOf(type);
+}
 
 const REQUEST_TYPES: ShiftRequest["type"][] = [
   "Shift Swap",
@@ -309,12 +314,13 @@ function ShiftsPage() {
   const navigate = useNavigate();
   const { rosterFor } = useShiftClock();
   const today = new Date().toISOString().slice(0, 10);
+  const monthStart = `${today.slice(0, 7)}-01`;
   const shiftTypes = shiftService.listShiftTypes().filter((shiftType) => shiftType.enabled);
   const activeEngineers = appUsers.filter(
     (target) => target.status !== "Inactive" && SHIFT_ELIGIBLE_ENGINEER_IDS.includes(target.id),
   );
   const [rows, setRows] = useState(() => shiftService.listSchedule());
-  const [dateFrom, setDateFrom] = useState(today);
+  const [dateFrom, setDateFrom] = useState(monthStart);
   const [dateTo, setDateTo] = useState("");
   const [shiftFilter, setShiftFilter] = useState<ShiftType | "All">("All");
   const [engineerFilter, setEngineerFilter] = useState("All");
@@ -375,9 +381,10 @@ function ShiftsPage() {
     return rows
       .filter((shift) => {
         if (user?.role === "engineer" || user?.role === "shift-lead") {
+          const canSeePublishedRoster = shift.status === "Published";
           const canSeeCurrentRoster = shift.date === today;
           const isOwnShift = shift.engineers.includes(user.id);
-          if (!canSeeCurrentRoster && !isOwnShift) return false;
+          if (!canSeePublishedRoster && !canSeeCurrentRoster && !isOwnShift) return false;
         }
         if (dateFrom && shift.date < dateFrom) return false;
         if (dateTo && shift.date > dateTo) return false;
@@ -389,7 +396,10 @@ function ShiftsPage() {
         if (search.trim() && !haystack.includes(search.trim().toLowerCase())) return false;
         return true;
       })
-      .sort((a, b) => `${a.date}-${a.type}`.localeCompare(`${b.date}-${b.type}`));
+      .sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        return dateCompare || shiftSortValue(a.type) - shiftSortValue(b.type);
+      });
   }, [dateFrom, dateTo, engineerFilter, rows, search, shiftFilter, today, user]);
 
   const groupedVisibleRows = useMemo(() => {
@@ -419,7 +429,7 @@ function ShiftsPage() {
       return {
         date,
         day: dayName(date),
-        shifts: shifts.sort((a, b) => a.type.localeCompare(b.type)),
+        shifts: [...shifts].sort((a, b) => shiftSortValue(a.type) - shiftSortValue(b.type)),
         allEngineers,
         combinedLeads,
         notes,
@@ -907,7 +917,10 @@ const publishGeneratedRoster = () => {
                 <div className="text-xs uppercase tracking-[0.2em] text-primary/80">
                   Schedule Builder
                 </div>
-                <h2 className="mt-1 text-lg font-semibold text-foreground">Auto Generate Roster</h2>
+                <h2 className="mt-1 text-lg font-semibold text-foreground">Generate Roster</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Uses team rotation, fixed weekday assignments, and overlay rules.
+                </p>
               </div>
             </div>
 
@@ -1143,12 +1156,12 @@ const publishGeneratedRoster = () => {
                 onClick={generateRosterRows}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
-                <Wand2 className="h-4 w-4" /> Auto Generate Roster
+                <Wand2 className="h-4 w-4" /> Generate Roster
               </button>
               <button
                 onClick={() =>
                   toast.info(
-                    "Advanced Builder is disabled for this demo. Use Auto Generate Roster with fixed weekday rules.",
+                    "Advanced Builder is disabled for this demo. Use Generate Roster with fixed weekday rules.",
                   )
                 }
                 className="inline-flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm font-medium text-muted-foreground"
