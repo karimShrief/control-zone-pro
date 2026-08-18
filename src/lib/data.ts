@@ -1,4 +1,4 @@
-// Starter data for Ops Command Platform.
+// Starter data for DC & NOC Operations Intelligence.
 // Replace these bootstrap records with your own team data or wire the services to an API.
 
 export type Role = "engineer" | "shift-lead" | "manager" | "executive" | "admin";
@@ -1029,8 +1029,8 @@ export interface SystemSettings {
 }
 
 export const systemSettings: SystemSettings = {
-  appName: "Ops Command Platform",
-  logoPlaceholder: "OCP",
+  appName: "DC & NOC Operations Intelligence",
+  logoPlaceholder: "DC",
   themePreference: "Light",
   enabledModules: moduleNames,
   navigationVisibility: {

@@ -228,8 +228,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold tracking-tight">Nerve Center</div>
-            <div className="text-[11px] text-sidebar-foreground/60 uppercase tracking-wider">
+            <div className="text-sm font-semibold tracking-tight">
               DC &amp; NOC Operations Intelligence
             </div>
           </div>

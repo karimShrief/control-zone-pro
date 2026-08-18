@@ -50,9 +50,6 @@ const bootstrapAccounts = [
             </div>
             <div>
               <div className="text-xl font-semibold">DC & NOC Operations Intelligence</div>
-              <div className="text-xs uppercase tracking-widest text-sidebar-foreground/60">
-                Nerve Center
-              </div>
             </div>
           </div>
         </div>
