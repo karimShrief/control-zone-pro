@@ -2,7 +2,7 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById, type ProjectTask } from "@/lib/data";
+import { users as appUsers, userById, type ProjectTask } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canEditProjectTask, canManageProjects } from "@/lib/rbac";
 import { projectService } from "@/lib/services";
@@ -44,6 +44,13 @@ function ProjectDetail() {
     );
     refresh();
     toast.success(`${task.id} progress updated`);
+  };
+
+  const updateAssignee = (taskId: string, assigneeId: string) => {
+    if (!user || !canManage) return;
+    projectService.updateTaskAssignee(taskId, assigneeId, user.id);
+    refresh();
+    toast.success("Project task reassigned");
   };
 
   return (
@@ -158,7 +165,24 @@ function ProjectDetail() {
                 <tr key={pt.id} className="hover:bg-muted/40">
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{pt.id}</td>
                   <td className="px-4 py-3 font-medium">{pt.title}</td>
-                  <td className="px-4 py-3 text-xs">{userById(pt.assignee)}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {canManage ? (
+                      <select
+                        value={pt.assignee ?? ""}
+                        onChange={(event) => updateAssignee(pt.id, event.target.value)}
+                        className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                      >
+                        <option value="">Unassigned</option>
+                        {appUsers.map((userOption) => (
+                          <option key={userOption.id} value={userOption.id}>
+                            {userOption.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      userById(pt.assignee)
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={pt.status} />
                   </td>
@@ -173,6 +197,16 @@ function ProjectDetail() {
                       </div>
                       <span className="text-xs w-9 text-right">{pt.completion}%</span>
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {user && canEditProjectTask(user, pt) ? (
+                      <button
+                        onClick={() => updateProgress(pt)}
+                        className="rounded-md border border-border bg-secondary px-2 py-1 text-xs hover:bg-secondary/80"
+                      >
+                        Update
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}

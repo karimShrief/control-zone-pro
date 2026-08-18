@@ -76,13 +76,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Ops Command Platform" },
-      { name: "description", content: "Unified operations platform for Data Center and NOC teams" },
-      { name: "author", content: "Ops Command" },
-      { property: "og:title", content: "Ops Command Platform" },
+      { title: "DC & NOC Operations Intelligence" },
+      {
+        name: "description",
+        content: "Nerve Center for shift-aware operations across Data Center and NOC",
+      },
+      { name: "author", content: "DC & NOC Operations Intelligence" },
+      { property: "og:title", content: "DC & NOC Operations Intelligence" },
       {
         property: "og:description",
-        content: "Unified operations platform for Data Center and NOC teams",
+        content: "Nerve Center for shift-aware operations across Data Center and NOC",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

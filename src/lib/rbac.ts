@@ -32,7 +32,7 @@ export function canAccessPath(user: User | null, pathname: string) {
 }
 
 export function canManageTasks(user: User | null) {
-  return !!user && ["engineer", "manager", "admin"].includes(user.role);
+  return !!user && ["engineer", "shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canEditTask(
@@ -46,29 +46,34 @@ export function canEditTask(
 }
 
 export function canManageProjects(user: User | null) {
-  return !!user && ["manager", "admin"].includes(user.role);
+  return !!user && ["manager", "shift-lead", "admin"].includes(user.role);
 }
 
 export function canEditProjectTask(user: User | null, task: Pick<ProjectTask, "assignee"> | null) {
   if (!user || !task) return false;
   if (["manager", "admin"].includes(user.role)) return true;
-  return ["engineer", "shift-lead"].includes(user.role) && task.assignee === user.id;
+  if (user.role === "shift-lead") return task.assignee === user.id || task.assignee === null;
+  return ["engineer"].includes(user.role) && task.assignee === user.id;
 }
 
 export function canSubmitHandover(user: User | null) {
-  return !!user && user.role === "engineer";
+  return !!user && ["engineer", "admin"].includes(user.role);
+}
+
+export function canCommentOnHandover(user: User | null) {
+  return !!user && ["engineer", "shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canCreateIncidents(user: User | null) {
-  return !!user && ["engineer", "manager", "admin"].includes(user.role);
+  return !!user && ["engineer", "shift-lead", "admin"].includes(user.role);
 }
 
 export function canWorkIncidents(user: User | null) {
-  return !!user && ["engineer", "manager", "admin"].includes(user.role);
+  return !!user && ["engineer", "shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canManageShiftRequests(user: User | null) {
-  return !!user && ["manager", "admin"].includes(user.role);
+  return !!user && ["shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canSubmitShiftRequests(user: User | null) {
@@ -80,11 +85,19 @@ export function canManageRoster(user: User | null) {
 }
 
 export function canAuditHandover(user: User | null) {
-  return !!user && ["manager", "admin"].includes(user.role);
+  return !!user && ["shift-lead", "manager", "admin"].includes(user.role);
 }
 
 export function canManageSops(user: User | null) {
   return !!user && ["manager", "admin"].includes(user.role);
+}
+
+export function canUploadSops(user: User | null) {
+  return !!user && !["engineer"].includes(user.role);
+}
+
+export function canCommentOnSops(user: User | null) {
+  return !!user && ["engineer", "shift-lead", "manager", "executive", "admin"].includes(user.role);
 }
 
 export function canViewImportCenter(user: User | null) {

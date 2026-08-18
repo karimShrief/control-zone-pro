@@ -149,7 +149,7 @@ const NAV: NavItem[] = [
 ];
 
 const THEME_EVENT = "ops-system-settings-changed";
-const THEME_OPTIONS: SystemSettings["themePreference"][] = ["System", "Light", "Dark"];
+const THEME_OPTIONS: SystemSettings["themePreference"][] = ["Light", "Dark"];
 
 function isDarkPreference(theme: SystemSettings["themePreference"]) {
   if (theme === "Dark") return true;
@@ -228,9 +228,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold tracking-tight">{systemSettings.appName}</div>
-            <div className="text-[11px] text-sidebar-foreground/60 uppercase tracking-wider">
-              Operations Command
+            <div className="text-sm font-semibold tracking-tight">
+              DC &amp; NOC Operations Intelligence
             </div>
           </div>
         </div>

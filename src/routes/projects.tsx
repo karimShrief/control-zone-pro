@@ -77,7 +77,18 @@ function ProjectsPage() {
                 </button>
               </>
             ) : null}
-            <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
+            <button
+              type="button"
+              disabled
+              title="Prototype only: manual project creation is not available in mock mode. Use the template flow instead."
+              aria-label="Create a new project is unavailable in this prototype"
+              className="inline-flex cursor-not-allowed items-center gap-2 rounded-md bg-primary/60 px-3 py-2 text-sm text-primary-foreground opacity-70"
+              onClick={() =>
+                toast.info(
+                  "Manual project creation is not available in this prototype. Use a template instead.",
+                )
+              }
+            >
               <Plus className="h-4 w-4" /> New Project
             </button>
           </div>

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userById, type Incident, type Severity } from "@/lib/data";
+import { userById, type Incident, type IncidentCategory, type Severity } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canCreateIncidents, canWorkIncidents } from "@/lib/rbac";
 import { configurationService, incidentService } from "@/lib/services";
@@ -29,6 +29,21 @@ function IncidentsPage() {
   const [sevFilter, setSevFilter] = useState<Severity | "All">("All");
   const [search, setSearch] = useState("");
   const [active, setActive] = useState<Incident | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [draft, setDraft] = useState({
+    title: "",
+    description: "",
+    severity: "SEV-3" as Severity,
+    category: "Power" as IncidentCategory,
+    shift: "Morning" as "Morning" | "Evening" | "Night",
+    incidentAt: new Date().toISOString().slice(0, 16),
+    impactDescription: "",
+    immediateActionTaken: "",
+    currentStatus: "Open",
+    relatedTask: "",
+    relatedHandover: "",
+    notes: "",
+  });
   const incidentRules = configurationService.listIncidentRules().filter((rule) => rule.active);
 
   const canCreate = canCreateIncidents(user);
@@ -57,17 +72,53 @@ function IncidentsPage() {
   };
 
   const createIncident = () => {
-    if (!user || !canCreate) return;
-    const rule = incidentRules[0];
+    if (!user || !canCreate) {
+      toast.error("You do not have permission to create incidents.");
+      return;
+    }
+
+    if (!draft.title.trim() || !draft.description.trim() || !draft.severity || !draft.category) {
+      toast.error("Incident title, description, severity and category are required.");
+      return;
+    }
+
+    if (!draft.incidentAt) {
+      toast.error("Incident date and time are required.");
+      return;
+    }
+
     const incident = incidentService.create(user.id, {
-      title: rule ? `${rule.category} incident review` : "Manual incident",
-      description: rule
-        ? "Incident created from a configured rule. Review the suggested severity, SLA and SOP."
-        : "Incident created from the Create Incident action",
+      title: draft.title.trim(),
+      description: draft.description.trim(),
       source: "Manual",
-      category: rule?.category ?? "Unknown",
+      category: draft.category,
+      severity: draft.severity,
+      shift: draft.shift,
+      incidentAt: draft.incidentAt,
+      impactDescription: draft.impactDescription.trim(),
+      immediateActionTaken: draft.immediateActionTaken.trim(),
+      currentStatus: draft.currentStatus,
+      relatedTask: draft.relatedTask.trim() || null,
+      relatedHandover: draft.relatedHandover.trim() || null,
+      notes: draft.notes.trim(),
     });
+
     refresh();
+    setCreateOpen(false);
+    setDraft({
+      title: "",
+      description: "",
+      severity: "SEV-3",
+      category: "Power",
+      shift: "Morning",
+      incidentAt: new Date().toISOString().slice(0, 16),
+      impactDescription: "",
+      immediateActionTaken: "",
+      currentStatus: "Open",
+      relatedTask: "",
+      relatedHandover: "",
+      notes: "",
+    });
     if (incident) toast.success(`${incident.id} created`);
   };
 
@@ -102,7 +153,7 @@ function IncidentsPage() {
         actions={
           canCreate ? (
             <button
-              onClick={createIncident}
+              onClick={() => setCreateOpen(true)}
               className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90"
             >
               <Plus className="h-4 w-4" /> Create Incident
@@ -330,10 +381,233 @@ function IncidentsPage() {
                 source: active.source,
                 sourceRef: active.sourceRef,
                 resolution: active.resolution,
+                shift: active.shift,
+                incidentAt: active.incidentAt,
+                impactDescription: active.impactDescription,
+                immediateActionTaken: active.immediateActionTaken,
+                currentStatus: active.currentStatus,
+                relatedTask: active.relatedTask,
+                relatedHandover: active.relatedHandover,
+                notes: active.notes,
               }
             : null
         }
       />
+
+      {createOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Incident creation
+                </div>
+                <h3 className="mt-1 text-xl font-semibold text-foreground">Create Incident</h3>
+              </div>
+              <button
+                onClick={() => setCreateOpen(false)}
+                className="rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="md:col-span-2 text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Incident title
+                </span>
+                <input
+                  value={draft.title}
+                  onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Title"
+                />
+              </label>
+
+              <label className="md:col-span-2 text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Detailed incident description
+                </span>
+                <textarea
+                  value={draft.description}
+                  onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  rows={4}
+                  placeholder="Describe the incident and the service impact."
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Shift
+                </span>
+                <select
+                  value={draft.shift}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      shift: event.target.value as "Morning" | "Evening" | "Night",
+                    })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                >
+                  <option value="Morning">Morning</option>
+                  <option value="Evening">Evening</option>
+                  <option value="Night">Night</option>
+                </select>
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Incident date/time
+                </span>
+                <input
+                  type="datetime-local"
+                  value={draft.incidentAt}
+                  onChange={(event) => setDraft({ ...draft, incidentAt: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Severity
+                </span>
+                <select
+                  value={draft.severity}
+                  onChange={(event) =>
+                    setDraft({ ...draft, severity: event.target.value as Severity })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                >
+                  <option value="SEV-1">SEV-1</option>
+                  <option value="SEV-2">SEV-2</option>
+                  <option value="SEV-3">SEV-3</option>
+                  <option value="SEV-4">SEV-4</option>
+                </select>
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Category
+                </span>
+                <select
+                  value={draft.category}
+                  onChange={(event) =>
+                    setDraft({ ...draft, category: event.target.value as IncidentCategory })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                >
+                  <option value="Power">Power</option>
+                  <option value="Network">Network</option>
+                  <option value="Server">Server</option>
+                  <option value="Storage">Storage</option>
+                  <option value="Cooling">Cooling</option>
+                  <option value="Security">Security</option>
+                  <option value="Access">Access</option>
+                  <option value="Application">Application</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              <label className="md:col-span-2 text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Impact description
+                </span>
+                <textarea
+                  value={draft.impactDescription}
+                  onChange={(event) =>
+                    setDraft({ ...draft, impactDescription: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  rows={3}
+                  placeholder="What systems or services were affected?"
+                />
+              </label>
+
+              <label className="md:col-span-2 text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Immediate action taken
+                </span>
+                <textarea
+                  value={draft.immediateActionTaken}
+                  onChange={(event) =>
+                    setDraft({ ...draft, immediateActionTaken: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  rows={3}
+                  placeholder="What did the team do right away?"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Current status
+                </span>
+                <input
+                  value={draft.currentStatus}
+                  onChange={(event) => setDraft({ ...draft, currentStatus: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Open"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Related task
+                </span>
+                <input
+                  value={draft.relatedTask}
+                  onChange={(event) => setDraft({ ...draft, relatedTask: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Optional"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Related handover
+                </span>
+                <input
+                  value={draft.relatedHandover}
+                  onChange={(event) => setDraft({ ...draft, relatedHandover: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Optional"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Notes
+                </span>
+                <textarea
+                  value={draft.notes}
+                  onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  rows={3}
+                  placeholder="Optional notes"
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setCreateOpen(false)}
+                className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createIncident}
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Create Incident
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

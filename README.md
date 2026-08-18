@@ -120,6 +120,15 @@ Planning documents:
 
 No Prisma dependency was added because this project does not currently have Prisma configured. The safe next step is schema review, then adding an ORM or MySQL client after DevOps/security approval.
 
+## Current Demo Status And Guardrails
+
+The current prototype is intentionally stable for demo use and follows the verified operational rules below:
+
+- Shift roster generation treats fixed-shift rules as hard constraints before off-day balancing. This prevents a fixed engineer from being overwritten by the fairness rotation logic.
+- Incident creation is restricted to engineer, shift lead and admin roles. Managers can work and review incidents, but they cannot create them in the mock workflow.
+- Prototype-only actions are visibly disabled when the mock backend does not yet support the action, with clear status messaging instead of silent dead buttons.
+- Import Center and SOP areas remain mocked and are not treated as live database workflows.
+
 ## Configuration Center
 
 Admin manages the platform from Configuration Center:

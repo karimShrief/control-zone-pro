@@ -34,6 +34,8 @@ export interface DetailItem {
   id: string;
   title: string;
   description?: string;
+  details?: string;
+  acceptanceCriteria?: string;
   status: string;
   priority?: string;
   severity?: string;
@@ -48,6 +50,16 @@ export interface DetailItem {
   type?: string;
   audit?: string;
   resolution?: string;
+  relatedIncident?: string | null;
+  relatedProject?: string | null;
+  relatedHandover?: string | null;
+  notes?: string;
+  shift?: "Morning" | "Evening" | "Night";
+  incidentAt?: string;
+  impactDescription?: string;
+  immediateActionTaken?: string;
+  currentStatus?: string;
+  relatedTask?: string | null;
 }
 
 interface CommentItem {
@@ -417,9 +429,48 @@ export function DetailDrawer({
           </TabsList>
 
           <TabsContent value="update" className="space-y-4 mt-4">
-            {item.description && (
-              <div className="text-sm text-muted-foreground rounded-md border border-border bg-muted/20 p-3">
-                {item.description}
+            {(item.description || item.details) && (
+              <div className="space-y-2 text-sm text-muted-foreground rounded-md border border-border bg-muted/20 p-3">
+                <div className="font-medium text-foreground">Description</div>
+                <div>{item.details || item.description}</div>
+                {item.acceptanceCriteria && (
+                  <div className="pt-2 border-t border-border">
+                    <div className="font-medium text-foreground">Acceptance criteria</div>
+                    <div>{item.acceptanceCriteria}</div>
+                  </div>
+                )}
+              </div>
+            )}
+            {(item.relatedIncident ||
+              item.relatedProject ||
+              item.relatedHandover ||
+              item.notes) && (
+              <div className="rounded-md border border-border bg-card p-3 text-sm">
+                <div className="grid grid-cols-1 gap-2 text-muted-foreground">
+                  {item.relatedIncident && (
+                    <div>
+                      <span className="font-medium text-foreground">Incident:</span>{" "}
+                      {item.relatedIncident}
+                    </div>
+                  )}
+                  {item.relatedProject && (
+                    <div>
+                      <span className="font-medium text-foreground">Project:</span>{" "}
+                      {item.relatedProject}
+                    </div>
+                  )}
+                  {item.relatedHandover && (
+                    <div>
+                      <span className="font-medium text-foreground">Handover:</span>{" "}
+                      {item.relatedHandover}
+                    </div>
+                  )}
+                  {item.notes && (
+                    <div>
+                      <span className="font-medium text-foreground">Notes:</span> {item.notes}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">

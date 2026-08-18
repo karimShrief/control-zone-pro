@@ -2,7 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
-import { users as appUsers, userById, type Task, type TaskType, type TaskStatus } from "@/lib/data";
+import {
+  users as appUsers,
+  userById,
+  type Priority,
+  type Task,
+  type TaskType,
+  type TaskStatus,
+} from "@/lib/data";
 import { useAuth } from "@/lib/auth";
 import { canEditTask, canManageTasks } from "@/lib/rbac";
 import { configurationService, taskService } from "@/lib/services";
@@ -43,6 +50,24 @@ function TasksPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "All">("All");
   const [active, setActive] = useState<Task | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [taskDraft, setTaskDraft] = useState({
+    title: "",
+    description: "",
+    details: "",
+    acceptanceCriteria: "",
+    type: "Daily DC Operation" as TaskType,
+    category: "DC Operations",
+    priority: "Medium" as Priority,
+    assignee:
+      appUsers.find((target) => target.role === "engineer" && target.status !== "Inactive")?.id ??
+      "",
+    dueDate: new Date().toISOString().slice(0, 10),
+    relatedIncident: "",
+    relatedProject: "",
+    relatedHandover: "",
+    notes: "",
+  });
 
   const canUpdate = canManageTasks(user);
   const canGenerateFromTemplate = ["manager", "admin"].includes(user?.role ?? "");
@@ -95,6 +120,71 @@ function TasksPage() {
     return true;
   });
 
+  const createTask = () => {
+    if (!user || !["manager", "shift-lead", "admin"].includes(user.role)) {
+      toast.error("You do not have permission to create tasks.");
+      return;
+    }
+    if (!taskDraft.title.trim() || !taskDraft.description.trim()) {
+      toast.error("Task title and description are required.");
+      return;
+    }
+    if (!taskDraft.assignee) {
+      toast.error("Assigned engineer is required.");
+      return;
+    }
+    if (!taskDraft.priority) {
+      toast.error("Priority is required.");
+      return;
+    }
+    if (!taskDraft.dueDate) {
+      toast.error("Due date is required.");
+      return;
+    }
+
+    const created = taskService.create(user.id, {
+      title: taskDraft.title,
+      description: taskDraft.description,
+      details: taskDraft.details,
+      acceptanceCriteria: taskDraft.acceptanceCriteria,
+      type: taskDraft.type,
+      category: taskDraft.category,
+      priority: taskDraft.priority,
+      assignee: taskDraft.assignee,
+      dueDate: taskDraft.dueDate,
+      relatedIncident: taskDraft.relatedIncident || null,
+      relatedProject: taskDraft.relatedProject || null,
+      relatedHandover: taskDraft.relatedHandover || null,
+      notes: taskDraft.notes,
+    });
+
+    if (!created) {
+      toast.error("Unable to create task. Please review the required fields.");
+      return;
+    }
+
+    setRows(taskService.list());
+    setCreateOpen(false);
+    setTaskDraft({
+      title: "",
+      description: "",
+      details: "",
+      acceptanceCriteria: "",
+      type: "Daily DC Operation",
+      category: "DC Operations",
+      priority: "Medium",
+      assignee:
+        appUsers.find((target) => target.role === "engineer" && target.status !== "Inactive")?.id ??
+        "",
+      dueDate: new Date().toISOString().slice(0, 10),
+      relatedIncident: "",
+      relatedProject: "",
+      relatedHandover: "",
+      notes: "",
+    });
+    toast.success(`Task ${created.id} created successfully.`);
+  };
+
   const summary = {
     total: rows.length,
     open: rows.filter((t) => !["Completed", "Cancelled"].includes(t.status)).length,
@@ -137,7 +227,10 @@ function TasksPage() {
                 </button>
               </>
             ) : null}
-            <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
+            <button
+              onClick={() => setCreateOpen(true)}
+              className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90"
+            >
               <Plus className="h-4 w-4" /> Create Task
             </button>
           </div>
@@ -362,6 +455,8 @@ function TasksPage() {
                 id: active.id,
                 title: active.title,
                 description: active.description,
+                details: active.details,
+                acceptanceCriteria: active.acceptanceCriteria,
                 status: active.status,
                 priority: active.priority,
                 sla: active.sla,
@@ -370,10 +465,234 @@ function TasksPage() {
                 type: active.type,
                 dueDate: active.dueDate,
                 audit: active.audit,
+                relatedIncident: active.relatedIncident,
+                relatedProject: active.relatedProject,
+                relatedHandover: active.relatedHandover,
+                notes: active.notes,
               }
             : null
         }
       />
+
+      {createOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Task creation
+                </div>
+                <h3 className="mt-1 text-xl font-semibold text-foreground">Create Task</h3>
+              </div>
+              <button
+                onClick={() => setCreateOpen(false)}
+                className="rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="md:col-span-2 text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Task title
+                </span>
+                <input
+                  value={taskDraft.title}
+                  onChange={(event) => setTaskDraft({ ...taskDraft, title: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Task title"
+                  required
+                />
+              </label>
+
+              <label className="md:col-span-2 text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Description / details
+                </span>
+                <textarea
+                  value={taskDraft.description}
+                  onChange={(event) =>
+                    setTaskDraft({ ...taskDraft, description: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  rows={4}
+                  placeholder="Describe the operational task and why it matters."
+                  required
+                />
+              </label>
+
+              <label className="md:col-span-2 text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Acceptance criteria / expected outcome
+                </span>
+                <textarea
+                  value={taskDraft.acceptanceCriteria}
+                  onChange={(event) =>
+                    setTaskDraft({ ...taskDraft, acceptanceCriteria: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  rows={3}
+                  placeholder="What defines a successful completion?"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Priority
+                </span>
+                <select
+                  value={taskDraft.priority}
+                  onChange={(event) =>
+                    setTaskDraft({ ...taskDraft, priority: event.target.value as Priority })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                >
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                  <option value="Critical">Critical</option>
+                </select>
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Category
+                </span>
+                <input
+                  value={taskDraft.category}
+                  onChange={(event) => setTaskDraft({ ...taskDraft, category: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="DC Operations"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Task type
+                </span>
+                <select
+                  value={taskDraft.type}
+                  onChange={(event) =>
+                    setTaskDraft({ ...taskDraft, type: event.target.value as TaskType })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                >
+                  <option value="Daily DC Operation">Daily DC Operation</option>
+                  <option value="General Task">General Task</option>
+                  <option value="NOC Task">NOC Task</option>
+                  <option value="DC Task">DC Task</option>
+                </select>
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Assigned engineer
+                </span>
+                <select
+                  value={taskDraft.assignee}
+                  onChange={(event) => setTaskDraft({ ...taskDraft, assignee: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                >
+                  <option value="">Select engineer</option>
+                  {appUsers
+                    .filter(
+                      (engineer) => engineer.role === "engineer" && engineer.status !== "Inactive",
+                    )
+                    .map((engineer) => (
+                      <option key={engineer.id} value={engineer.id}>
+                        {engineer.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Due date
+                </span>
+                <input
+                  type="date"
+                  value={taskDraft.dueDate}
+                  onChange={(event) => setTaskDraft({ ...taskDraft, dueDate: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  required
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Related incident
+                </span>
+                <input
+                  value={taskDraft.relatedIncident}
+                  onChange={(event) =>
+                    setTaskDraft({ ...taskDraft, relatedIncident: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Optional"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Related project
+                </span>
+                <input
+                  value={taskDraft.relatedProject}
+                  onChange={(event) =>
+                    setTaskDraft({ ...taskDraft, relatedProject: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Optional"
+                />
+              </label>
+
+              <label className="text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Related handover
+                </span>
+                <input
+                  value={taskDraft.relatedHandover}
+                  onChange={(event) =>
+                    setTaskDraft({ ...taskDraft, relatedHandover: event.target.value })
+                  }
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  placeholder="Optional"
+                />
+              </label>
+
+              <label className="md:col-span-2 text-sm">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Notes
+                </span>
+                <textarea
+                  value={taskDraft.notes}
+                  onChange={(event) => setTaskDraft({ ...taskDraft, notes: event.target.value })}
+                  className="mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2"
+                  rows={3}
+                  placeholder="Optional operational notes."
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setCreateOpen(false)}
+                className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createTask}
+                className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Create Task
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

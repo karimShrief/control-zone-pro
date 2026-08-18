@@ -12,6 +12,7 @@ import {
   Plus,
   FileWarning,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/my-work")({
   component: MyWork,
@@ -154,7 +155,18 @@ function MyWork() {
                 right={
                   <>
                     <StatusBadge status={t.priority} />
-                    <button className="text-xs rounded border border-border px-2 py-0.5 hover:bg-muted">
+                    <button
+                      type="button"
+                      disabled
+                      title="Prototype only: claim action is not available in mock mode."
+                      aria-label="Take unassigned item is unavailable in this prototype"
+                      onClick={() =>
+                        toast.info(
+                          "Claiming an unassigned item is not available in this prototype.",
+                        )
+                      }
+                      className="cursor-not-allowed rounded border border-border px-2 py-0.5 text-xs opacity-60"
+                    >
                       Take
                     </button>
                   </>

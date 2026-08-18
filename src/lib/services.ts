@@ -3,6 +3,7 @@ import {
   coverageRules,
   dashboardWidgetSettings,
   handoverPoints,
+  handoverComments,
   handoverTemplates,
   importTemplateDefinitions,
   incidentRules,
@@ -31,6 +32,7 @@ import {
   type Role,
   type RoleConfig,
   type Shift,
+  type HandoverComment,
   type HandoverPoint,
   type HandoverTemplate,
   type ImportJob,
@@ -78,6 +80,46 @@ export const auditService = {
   list: () => listAuditLogs(),
 };
 
+export const availabilityService = {
+  list: () =>
+    users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      availability: user.availability ?? "Available",
+      availabilityReason: user.availabilityReason ?? "Available for rotation",
+    })),
+  summary: () => {
+    const statuses = users.reduce(
+      (summary, user) => {
+        const availability = user.availability ?? "Available";
+        summary[availability] = (summary[availability] ?? 0) + 1;
+        return summary;
+      },
+      {} as Record<string, number>,
+    );
+
+    return {
+      total: users.length,
+      available: statuses["Available"] ?? 0,
+      external: statuses["External Activity"] ?? 0,
+      emergency: statuses["Emergency Leave"] ?? 0,
+      offDuty: statuses["Off Duty"] ?? 0,
+      onLeave: statuses["On Leave"] ?? 0,
+    };
+  },
+  get: (userId: string) => {
+    const user = users.find((item) => item.id === userId);
+    return {
+      id: user?.id ?? userId,
+      name: user?.name ?? userId,
+      role: user?.role ?? "engineer",
+      availability: user?.availability ?? "Available",
+      availabilityReason: user?.availabilityReason ?? "Available for rotation",
+    };
+  },
+};
+
 function nextNumericId(prefix: string, ids: string[]) {
   const next =
     Math.max(
@@ -86,6 +128,119 @@ function nextNumericId(prefix: string, ids: string[]) {
     ) + 1;
   return `${prefix}${next}`;
 }
+
+function readMockStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const value = window.localStorage.getItem(key);
+    return value ? (JSON.parse(value) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeMockStorage<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function hydrateMockTasks() {
+  if (typeof window === "undefined") return;
+  const stored = readMockStorage<Task[]>("ops-command-mock-tasks", []);
+  if (stored.length) {
+    tasks.splice(0, tasks.length, ...stored);
+  } else {
+    writeMockStorage("ops-command-mock-tasks", tasks);
+  }
+}
+
+function hydrateMockShifts() {
+  if (typeof window === "undefined") return;
+  const stored = readMockStorage<Shift[]>("ops-command-mock-shifts", []);
+  if (stored.length) {
+    shifts.splice(0, shifts.length, ...stored);
+  } else {
+    writeMockStorage("ops-command-mock-shifts", shifts);
+  }
+}
+
+function persistMockShifts() {
+  if (typeof window === "undefined") return;
+  writeMockStorage("ops-command-mock-shifts", shifts);
+}
+
+function hydrateMockIncidents() {
+  if (typeof window === "undefined") return;
+  const stored = readMockStorage<Incident[]>("ops-command-mock-incidents", []);
+  if (stored.length) {
+    incidents.splice(0, incidents.length, ...stored);
+  } else {
+    writeMockStorage("ops-command-mock-incidents", incidents);
+  }
+}
+
+function hydrateMockProjects() {
+  if (typeof window === "undefined") return;
+  const storedProjects = readMockStorage<typeof projects>("ops-command-mock-projects", []);
+  const storedProjectTasks = readMockStorage<typeof projectTasks>(
+    "ops-command-mock-project-tasks",
+    [],
+  );
+
+  if (storedProjects.length) {
+    projects.splice(0, projects.length, ...storedProjects);
+  } else {
+    writeMockStorage("ops-command-mock-projects", projects);
+  }
+
+  if (storedProjectTasks.length) {
+    projectTasks.splice(0, projectTasks.length, ...storedProjectTasks);
+  } else {
+    writeMockStorage("ops-command-mock-project-tasks", projectTasks);
+  }
+}
+
+function persistMockProjects() {
+  if (typeof window === "undefined") return;
+  writeMockStorage("ops-command-mock-projects", projects);
+  writeMockStorage("ops-command-mock-project-tasks", projectTasks);
+}
+
+function hydrateMockHandovers() {
+  if (typeof window === "undefined") return;
+  const storedHandovers = readMockStorage<typeof handoverPoints>(
+    "ops-command-mock-handovers",
+    [],
+  );
+  const storedComments = readMockStorage<typeof handoverComments>(
+    "ops-command-mock-handover-comments",
+    [],
+  );
+
+  if (storedHandovers.length) {
+    handoverPoints.splice(0, handoverPoints.length, ...storedHandovers);
+  } else {
+    writeMockStorage("ops-command-mock-handovers", handoverPoints);
+  }
+
+  if (storedComments.length) {
+    handoverComments.splice(0, handoverComments.length, ...storedComments);
+  } else {
+    writeMockStorage("ops-command-mock-handover-comments", handoverComments);
+  }
+}
+
+function persistMockHandovers() {
+  if (typeof window === "undefined") return;
+  writeMockStorage("ops-command-mock-handovers", handoverPoints);
+  writeMockStorage("ops-command-mock-handover-comments", handoverComments);
+}
+
+hydrateMockTasks();
+hydrateMockShifts();
+hydrateMockIncidents();
+hydrateMockProjects();
+hydrateMockHandovers();
 
 function adminActor(actorId: string | undefined) {
   return actorId ?? "system";
@@ -1071,7 +1226,92 @@ export const configurationService = {
 };
 
 export const taskService = {
-  list: () => [...tasks],
+  list: () => {
+    hydrateMockTasks();
+    return [...tasks];
+  },
+  create: (
+    actorId: string,
+    input: {
+      title: string;
+      description: string;
+      details?: string;
+      acceptanceCriteria?: string;
+      type: TaskType;
+      category: string;
+      priority: Priority;
+      assignee: string | null;
+      dueDate: string;
+      relatedIncident?: string | null;
+      relatedProject?: string | null;
+      relatedHandover?: string | null;
+      notes?: string;
+    },
+  ) => {
+    if (
+      !input.title.trim() ||
+      !input.description.trim() ||
+      !input.assignee ||
+      !input.priority ||
+      !input.dueDate
+    ) {
+      return null;
+    }
+    const task: Task = {
+      id: nextNumericId(
+        "TASK-",
+        tasks.map((item) => item.id),
+      ),
+      title: input.title.trim(),
+      description: input.description.trim(),
+      details: input.details?.trim() || input.description.trim(),
+      acceptanceCriteria:
+        input.acceptanceCriteria?.trim() ||
+        "Task completed according to the assigned operational standard.",
+      type: input.type,
+      category: input.category,
+      priority: input.priority,
+      impact:
+        input.priority === "Critical" ? "High" : input.priority === "High" ? "High" : "Medium",
+      status: "New",
+      assignee: input.assignee,
+      dueDate: input.dueDate,
+      sla: "On Track",
+      comments: 0,
+      evidence: 0,
+      audit: "Pending",
+      relatedIncident: input.relatedIncident ?? null,
+      relatedProject: input.relatedProject ?? null,
+      relatedHandover: input.relatedHandover ?? null,
+      notes: input.notes?.trim() || "",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    tasks.unshift(task);
+    writeMockStorage("ops-command-mock-tasks", tasks);
+    recordAuditLog({
+      actorId,
+      action: "task.created",
+      entityType: "task",
+      entityId: task.id,
+      after: task,
+    });
+    return task;
+  },
+  update: (taskId: string, actorId: string, input: Partial<Task>) => {
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return null;
+    Object.assign(task, input, { updatedAt: new Date().toISOString() });
+    writeMockStorage("ops-command-mock-tasks", tasks);
+    recordAuditLog({
+      actorId,
+      action: "task.updated",
+      entityType: "task",
+      entityId: taskId,
+      after: task,
+    });
+    return task;
+  },
   createFromTemplate: (actorId: string, templateId: string) => {
     const template = taskTemplates.find((item) => item.id === templateId && item.active);
     if (!template) return null;
@@ -1097,6 +1337,7 @@ export const taskService = {
       audit: "Pending" as const,
     };
     tasks.unshift(task);
+    writeMockStorage("ops-command-mock-tasks", tasks);
     recordAuditLog({
       actorId,
       action: "task.generated-from-template",
@@ -1111,6 +1352,8 @@ export const taskService = {
     if (!task) return null;
     const before = { status: task.status };
     task.status = status;
+    task.updatedAt = new Date().toISOString();
+    writeMockStorage("ops-command-mock-tasks", tasks);
     recordAuditLog({
       actorId,
       action: "task.status.update",
@@ -1126,6 +1369,8 @@ export const taskService = {
     if (!task) return null;
     const before = { assignee: task.assignee };
     task.assignee = assigneeId;
+    task.updatedAt = new Date().toISOString();
+    writeMockStorage("ops-command-mock-tasks", tasks);
     recordAuditLog({
       actorId,
       action: "task.assign",
@@ -1142,7 +1387,22 @@ export const incidentService = {
   list: () => [...incidents],
   create: (
     actorId: string,
-    input: Pick<Incident, "title" | "description" | "source" | "category">,
+    input: Pick<
+      Incident,
+      | "title"
+      | "description"
+      | "source"
+      | "category"
+      | "severity"
+      | "shift"
+      | "incidentAt"
+      | "impactDescription"
+      | "immediateActionTaken"
+      | "currentStatus"
+      | "relatedTask"
+      | "relatedHandover"
+      | "notes"
+    >,
   ) => {
     const rule = incidentRules.find((item) => item.category === input.category && item.active);
     const incident: Incident = {
@@ -1150,22 +1410,29 @@ export const incidentService = {
         "INC-",
         incidents.map((incident) => incident.id),
       ),
-      title: input.title,
-      description: rule
-        ? `${input.description}\n\nRule applied: ${rule.recommendedSop} / SLA ${rule.slaMinutes} min`
-        : input.description,
-      source: input.source,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      source: input.source ?? "Manual",
       sourceRef: rule ? `Rule: ${rule.id}` : "Manual Entry",
       category: input.category,
       subcategory: rule?.recommendedSop ?? "General",
-      severity: rule?.defaultSeverity ?? "SEV-3",
+      severity: input.severity ?? rule?.defaultSeverity ?? "SEV-3",
       status: "Unassigned",
       assignee: null,
       sla: "On Track",
       createdAt: new Date().toISOString().slice(0, 16).replace("T", " "),
       updatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+      shift: input.shift ?? "Morning",
+      incidentAt: input.incidentAt ?? new Date().toISOString(),
+      impactDescription: input.impactDescription?.trim() ?? "",
+      immediateActionTaken: input.immediateActionTaken?.trim() ?? "",
+      currentStatus: input.currentStatus ?? "Open",
+      relatedTask: input.relatedTask ?? null,
+      relatedHandover: input.relatedHandover ?? null,
+      notes: input.notes?.trim() ?? "",
     };
     incidents.unshift(incident);
+    writeMockStorage("ops-command-mock-incidents", incidents);
     recordAuditLog({
       actorId,
       action: "incident.create",
@@ -1241,11 +1508,22 @@ function recalculateProjectCompletion(projectId: string) {
 }
 
 export const projectService = {
-  list: () => [...projects],
-  get: (projectId: string) => projects.find((project) => project.id === projectId) ?? null,
-  listTasks: (projectId?: string) =>
-    projectId ? projectTasks.filter((task) => task.projectId === projectId) : [...projectTasks],
+  list: () => {
+    hydrateMockProjects();
+    return [...projects];
+  },
+  get: (projectId: string) => {
+    hydrateMockProjects();
+    return projects.find((project) => project.id === projectId) ?? null;
+  },
+  listTasks: (projectId?: string) => {
+    hydrateMockProjects();
+    return projectId
+      ? projectTasks.filter((task) => task.projectId === projectId)
+      : [...projectTasks];
+  },
   createFromTemplate: (actorId: string, templateId: string) => {
+    hydrateMockProjects();
     const template = projectTemplates.find((item) => item.id === templateId && item.active);
     if (!template) return null;
     const now = new Date();
@@ -1290,6 +1568,7 @@ export const projectService = {
         evidence: 0,
       });
     });
+    persistMockProjects();
     recordAuditLog({
       actorId,
       action: "project.generated-from-template",
@@ -1300,6 +1579,7 @@ export const projectService = {
     return project;
   },
   createTask: (projectId: string, actorId: string): ProjectTask | null => {
+    hydrateMockProjects();
     const project = projects.find((item) => item.id === projectId);
     if (!project) return null;
     const task: ProjectTask = {
@@ -1317,9 +1597,12 @@ export const projectService = {
       completion: 0,
       comments: 0,
       evidence: 0,
+      latestUpdate: "Task created and awaiting assignment.",
+      lastUpdatedBy: actorId,
     };
     projectTasks.push(task);
     recalculateProjectCompletion(projectId);
+    persistMockProjects();
     recordAuditLog({
       actorId,
       action: "project-task.create",
@@ -1330,13 +1613,17 @@ export const projectService = {
     return task;
   },
   updateTaskProgress: (taskId: string, completion: number, actorId: string) => {
+    hydrateMockProjects();
     const task = projectTasks.find((item) => item.id === taskId);
     if (!task) return null;
     const nextCompletion = Math.max(0, Math.min(100, completion));
     const before = { completion: task.completion, status: task.status };
     task.completion = nextCompletion;
     task.status = nextCompletion >= 100 ? "Done" : nextCompletion > 0 ? "In Progress" : "To Do";
+    task.lastUpdatedBy = actorId;
+    task.latestUpdate = `${userById(actorId)} updated progress to ${nextCompletion}% and set status to ${task.status}.`;
     const project = recalculateProjectCompletion(task.projectId);
+    persistMockProjects();
     recordAuditLog({
       actorId,
       action: "project-task.progress.update",
@@ -1347,7 +1634,27 @@ export const projectService = {
         completion: task.completion,
         status: task.status,
         projectCompletion: project?.completion,
+        latestUpdate: task.latestUpdate,
       },
+    });
+    return task;
+  },
+  updateTaskAssignee: (taskId: string, assigneeId: string | null, actorId: string) => {
+    hydrateMockProjects();
+    const task = projectTasks.find((item) => item.id === taskId);
+    if (!task) return null;
+    const before = { assignee: task.assignee };
+    task.assignee = assigneeId;
+    task.lastUpdatedBy = actorId;
+    task.latestUpdate = `${userById(actorId)} assigned this task to ${assigneeId ? userById(assigneeId) : "unassigned"}.`;
+    persistMockProjects();
+    recordAuditLog({
+      actorId,
+      action: "project-task.assign",
+      entityType: "project-task",
+      entityId: task.id,
+      before,
+      after: { assignee: assigneeId, latestUpdate: task.latestUpdate },
     });
     return task;
   },
@@ -1484,6 +1791,7 @@ export const shiftService = {
     };
     shift.coverageStatus = derivedCoverageStatus(shift);
     shifts.push(shift);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "shift.created",
@@ -1497,6 +1805,7 @@ export const shiftService = {
     const index = shifts.findIndex((item) => item.date === date && item.type === type);
     if (index === -1) return null;
     const [shift] = shifts.splice(index, 1);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "shift.deleted",
@@ -1536,6 +1845,7 @@ export const shiftService = {
       shifts.push(shift);
       created += 1;
     });
+    persistMockShifts();
     const result = { total: input.length, created, updated };
     recordAuditLog({
       actorId: adminActor(actorId),
@@ -1611,6 +1921,7 @@ export const shiftService = {
       });
     });
 
+    persistMockShifts();
     const result = {
       month: input.month,
       total: dates.length * input.shiftTypes.length,
@@ -1657,6 +1968,7 @@ export const shiftService = {
     if (input.coverageStatus) shift.coverageStatus = input.coverageStatus;
     if (input.notes !== undefined) shift.notes = input.notes;
     shift.coverageStatus = derivedCoverageStatus(shift);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "shift.updated",
@@ -1672,6 +1984,7 @@ export const shiftService = {
     const before = { engineers: [...shift.engineers] };
     if (!shift.engineers.includes(engineerId)) shift.engineers.push(engineerId);
     shift.coverageStatus = derivedCoverageStatus(shift);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "roster.engineer.added",
@@ -1688,6 +2001,7 @@ export const shiftService = {
     shift.engineers = shift.engineers.filter((id) => id !== engineerId);
     if (shift.shiftLead === engineerId) shift.shiftLead = shift.engineers[0];
     shift.coverageStatus = derivedCoverageStatus(shift);
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "roster.engineer.removed",
@@ -1706,6 +2020,7 @@ export const shiftService = {
     const shift = ensureShift(date, type);
     const before = { notes: shift.notes };
     shift.notes = note;
+    persistMockShifts();
     recordAuditLog({
       actorId: adminActor(actorId),
       action: "shift.note.updated",
@@ -1759,6 +2074,7 @@ export const shiftRequestService = {
       id: `SR-${shiftRequests.length + 1}`,
       ...input,
       status: "Pending",
+      shiftLeadApproval: "-",
       managerApproval: "-",
     };
     shiftRequests.unshift(request);
@@ -1774,30 +2090,98 @@ export const shiftRequestService = {
   updateStatus: (requestId: string, status: ShiftRequest["status"], actorId: string) => {
     const request = shiftRequests.find((item) => item.id === requestId);
     if (!request) return null;
-    const before = { status: request.status, managerApproval: request.managerApproval };
-    request.status = status;
-    request.managerApproval = status === "Pending" ? "-" : `${status} by ${userById(actorId)}`;
-    if (status === "Approved") applyApprovedShiftRequest(request, actorId);
+    const actor = users.find((user) => user.id === actorId);
+    const before = {
+      status: request.status,
+      shiftLeadApproval: request.shiftLeadApproval,
+      managerApproval: request.managerApproval,
+    };
+
+    if (actor?.role === "shift-lead" || actor?.role === "admin") {
+      request.shiftLeadApproval = status === "Pending" ? "-" : `${status} by ${userById(actorId)}`;
+    }
+
+    if (actor?.role === "manager" || actor?.role === "admin") {
+      request.managerApproval = status === "Pending" ? "-" : `${status} by ${userById(actorId)}`;
+    }
+
+    if (
+      request.shiftLeadApproval.includes("Approved") &&
+      request.managerApproval.includes("Approved")
+    ) {
+      request.status = "Approved";
+    } else if (
+      request.shiftLeadApproval.includes("Rejected") ||
+      request.managerApproval.includes("Rejected")
+    ) {
+      request.status = "Rejected";
+    } else {
+      request.status = "Pending";
+    }
+
+    if (request.status === "Approved") applyApprovedShiftRequest(request, actorId);
+
     recordAuditLog({
       actorId,
       action:
-        status === "Approved"
+        request.status === "Approved"
           ? "shift-request.approved"
-          : status === "Rejected"
+          : request.status === "Rejected"
             ? "shift-request.rejected"
             : "shift-request.status.update",
       entityType: "shift-request",
       entityId: requestId,
       before,
-      after: { status: request.status, managerApproval: request.managerApproval },
+      after: {
+        status: request.status,
+        shiftLeadApproval: request.shiftLeadApproval,
+        managerApproval: request.managerApproval,
+      },
     });
-    request.managerApproval = status === "Pending" ? "-" : `${status} by ${userById(actorId)}`;
+
     return request;
   },
 };
 
 export const handoverService = {
-  list: () => [...handoverPoints],
+  list: () => {
+    hydrateMockHandovers();
+    return [...handoverPoints];
+  },
+  listComments: (handoverId: string) => {
+    hydrateMockHandovers();
+    return [...handoverComments]
+      .filter((comment) => comment.handoverId === handoverId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+  addComment: (
+    actorId: string,
+    handoverId: string,
+    input: Pick<HandoverComment, "commentText" | "handoverPointId" | "visibility">,
+  ) => {
+    hydrateMockHandovers();
+    const actor = users.find((user) => user.id === actorId);
+    const comment: HandoverComment = {
+      id: `HC-${handoverComments.length + 1}`,
+      handoverId,
+      handoverPointId: input.handoverPointId,
+      commentText: input.commentText.trim(),
+      createdBy: actorId,
+      createdAt: new Date().toISOString(),
+      role: actor?.role ?? "engineer",
+      visibility: input.visibility ?? "Team",
+    };
+    handoverComments.unshift(comment);
+    persistMockHandovers();
+    recordAuditLog({
+      actorId: adminActor(actorId),
+      action: "handover.comment.added",
+      entityType: "handover",
+      entityId: handoverId,
+      after: { commentId: comment.id, commentText: comment.commentText, createdBy: actorId },
+    });
+    return comment;
+  },
   create: (
     actorId: string,
     shiftOrInput:
@@ -1808,6 +2192,7 @@ export const handoverService = {
         > &
           Partial<Pick<HandoverPoint, "status" | "relatedRef" | "evidence">>),
   ) => {
+    hydrateMockHandovers();
     const input =
       typeof shiftOrInput === "string"
         ? {
@@ -1843,6 +2228,7 @@ export const handoverService = {
       audit: "Pending",
     };
     handoverPoints.unshift(point);
+    persistMockHandovers();
     recordAuditLog({
       actorId,
       action: "handover.create",
@@ -1853,11 +2239,13 @@ export const handoverService = {
     return point;
   },
   updateAudit: (handoverId: string, audit: HandoverPoint["audit"], actorId: string) => {
+    hydrateMockHandovers();
     const handover = handoverPoints.find((item) => item.id === handoverId);
     if (!handover) return null;
     const before = { audit: handover.audit };
     handover.audit = audit;
     handover.acknowledged = audit === "Approved" ? true : handover.acknowledged;
+    persistMockHandovers();
     recordAuditLog({
       actorId,
       action: "handover.audit.update",

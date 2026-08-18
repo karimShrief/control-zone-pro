@@ -1,7 +1,9 @@
-// Starter data for Ops Command Platform.
+// Starter data for DC & NOC Operations Intelligence.
 // Replace these bootstrap records with your own team data or wire the services to an API.
 
 export type Role = "engineer" | "shift-lead" | "manager" | "executive" | "admin";
+export type AvailabilityStatus =
+  "Available" | "External Activity" | "Emergency Leave" | "Off Duty" | "On Leave";
 
 export interface User {
   id: string;
@@ -11,6 +13,8 @@ export interface User {
   role: Role;
   team?: string;
   status?: "Active" | "Inactive";
+  availability?: AvailabilityStatus;
+  availabilityReason?: string;
   avatar?: string;
 }
 
@@ -23,6 +27,8 @@ export const users: User[] = [
     role: "engineer",
     team: "DC",
     status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for rotation",
   },
   {
     id: "u2",
@@ -32,6 +38,8 @@ export const users: User[] = [
     role: "shift-lead",
     team: "Shared",
     status: "Active",
+    availability: "External Activity",
+    availabilityReason: "Training program outside the site",
   },
   {
     id: "u3",
@@ -41,6 +49,8 @@ export const users: User[] = [
     role: "manager",
     team: "Shared",
     status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster review",
   },
   {
     id: "u4",
@@ -49,6 +59,8 @@ export const users: User[] = [
     name: "Executive User",
     role: "executive",
     status: "Active",
+    availability: "Emergency Leave",
+    availabilityReason: "Emergency leave approved",
   },
   {
     id: "u5",
@@ -58,6 +70,74 @@ export const users: User[] = [
     role: "admin",
     team: "Shared",
     status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for support coverage",
+  },
+  {
+    id: "u6",
+    username: "karim",
+    password: "change-me",
+    name: "Karim",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u7",
+    username: "ranko",
+    password: "change-me",
+    name: "Ranko",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u8",
+    username: "Fareed",
+    password: "change-me",
+    name: "Fareed",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u9",
+    username: "Shrief",
+    password: "change-me",
+    name: "Shrief",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u10",
+    username: "Febin",
+    password: "change-me",
+    name: "Febin",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
+  },
+  {
+    id: "u11",
+    username: "AbuTaher",
+    password: "change-me",
+    name: "AbuTaher",
+    role: "engineer",
+    team: "DC",
+    status: "Active",
+    availability: "Available",
+    availabilityReason: "Available for roster rotation",
   },
 ];
 
@@ -83,6 +163,8 @@ export interface Task {
   id: string;
   title: string;
   description: string;
+  details?: string;
+  acceptanceCriteria?: string;
   type: TaskType;
   category: string;
   priority: Priority;
@@ -94,9 +176,37 @@ export interface Task {
   comments: number;
   evidence: number;
   audit: "Pending" | "Approved" | "Needs Update";
+  relatedIncident?: string | null;
+  relatedProject?: string | null;
+  relatedHandover?: string | null;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-export const tasks: Task[] = [];
+export const tasks: Task[] = [
+  {
+    id: "TASK-1",
+    title: "Daily DC equipment check",
+    description: "Review the critical DC equipment checklist before the next shift.",
+    details: "Inspect UPS, cooling, and generator readings. Confirm no alarms remain open.",
+    acceptanceCriteria: "Checklist completed and signed off by the shift lead.",
+    type: "Daily DC Operation",
+    category: "DC Operations",
+    priority: "High",
+    impact: "High",
+    status: "In Progress",
+    assignee: "u6",
+    dueDate: new Date().toISOString().slice(0, 10),
+    sla: "On Track",
+    comments: 0,
+    evidence: 0,
+    audit: "Pending",
+    notes: "Complete before the next maintenance window.",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
 
 export type IncidentSource =
   "Monitoring Alert" | "Manual" | "Handover" | "Project Issue" | "ITSM Ticket";
@@ -129,6 +239,14 @@ export interface Incident {
   createdAt: string;
   updatedAt: string;
   resolution?: string;
+  shift?: "Morning" | "Evening" | "Night";
+  incidentAt?: string;
+  impactDescription?: string;
+  immediateActionTaken?: string;
+  currentStatus?: string;
+  relatedTask?: string | null;
+  relatedHandover?: string | null;
+  notes?: string;
 }
 
 export const incidents: Incident[] = [];
@@ -146,6 +264,8 @@ export interface ProjectTask {
   completion: number;
   comments: number;
   evidence: number;
+  latestUpdate?: string;
+  lastUpdatedBy?: string | null;
 }
 
 export interface Project {
@@ -180,6 +300,8 @@ export interface Shift {
   shiftLead?: string;
   coverageStatus?: CoverageStatus;
   notes?: string;
+  status?: "Draft" | "Published";
+  warnings?: string[];
 }
 
 const today = new Date();
@@ -249,6 +371,7 @@ export interface ShiftRequest {
   requestedShift: ShiftType;
   reason: string;
   status: "Pending" | "Approved" | "Rejected";
+  shiftLeadApproval: string;
   managerApproval: string;
 }
 
@@ -906,9 +1029,9 @@ export interface SystemSettings {
 }
 
 export const systemSettings: SystemSettings = {
-  appName: "Ops Command Platform",
-  logoPlaceholder: "OCP",
-  themePreference: "System",
+  appName: "DC & NOC Operations Intelligence",
+  logoPlaceholder: "DC",
+  themePreference: "Light",
   enabledModules: moduleNames,
   navigationVisibility: {
     engineer: roleConfigs.find((role) => role.id === "engineer")?.modules ?? [],
@@ -920,6 +1043,17 @@ export const systemSettings: SystemSettings = {
 
 export type HandoverCategory =
   "Incident" | "Task" | "Project" | "Maintenance" | "Alert" | "Access" | "General";
+
+export interface HandoverComment {
+  id: string;
+  handoverId: string;
+  handoverPointId?: string;
+  commentText: string;
+  createdBy: string;
+  createdAt: string;
+  role: Role;
+  visibility?: "Team" | "Manager Only" | "Admin Only";
+}
 
 export interface HandoverPoint {
   id: string;
@@ -939,6 +1073,7 @@ export interface HandoverPoint {
 }
 
 export const handoverPoints: HandoverPoint[] = [];
+export const handoverComments: HandoverComment[] = [];
 
 export interface SOP {
   id: string;

@@ -4,9 +4,9 @@ import { PageHeader } from "@/components/AppShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { userById } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
-import { canManageSops } from "@/lib/rbac";
+import { canCommentOnSops, canManageSops, canUploadSops } from "@/lib/rbac";
 import { configurationService, sopService } from "@/lib/services";
-import { Search, Download, FileText, Plus } from "lucide-react";
+import { Search, Download, FileText, Plus, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/sop")({
@@ -16,8 +16,11 @@ export const Route = createFileRoute("/sop")({
 function SOPPage() {
   const { user } = useAuth();
   const [rows] = useState(() => sopService.list());
+  const [commentDraft, setCommentDraft] = useState("");
   const sopSettings = configurationService.listSopSettings().filter((setting) => setting.active);
   const canManage = canManageSops(user);
+  const canUpload = canUploadSops(user);
+  const canComment = canCommentOnSops(user);
   const categories = Array.from(new Set(rows.map((s) => s.category)));
   const types = Array.from(new Set(rows.map((s) => s.type)));
   const [cat, setCat] = useState<string | null>(null);
@@ -28,6 +31,18 @@ function SOPPage() {
     if (!user) return;
     sopService.recordDownload(sopId, user.id);
     toast.success(`${sopId} download recorded`);
+  };
+
+  const addSuggestionComment = () => {
+    if (!user || !canComment) return;
+    const trimmed = commentDraft.trim();
+    if (!trimmed) {
+      toast.error("Suggested modification comment is required.");
+      return;
+    }
+
+    toast.success("Suggested modification recorded for review.");
+    setCommentDraft("");
   };
 
   const filtered = rows.filter((s) => {
@@ -44,8 +59,11 @@ function SOPPage() {
         title="SOP Library"
         subtitle="Approved procedures, runbooks, troubleshooting guides and operational evidence."
         actions={
-          canManage ? (
-            <button className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90">
+          canUpload || canManage ? (
+            <button
+              disabled={!canUpload && !canManage}
+              className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               <Plus className="h-4 w-4" /> New Document
             </button>
           ) : null
@@ -134,6 +152,39 @@ function SOPPage() {
             />
             <span className="text-xs text-muted-foreground">{filtered.length} results</span>
           </div>
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <h3 className="text-sm font-semibold">Suggested modifications</h3>
+                <p className="text-xs text-muted-foreground">
+                  Engineers can raise a comment proposing changes to an SOP.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <textarea
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+                placeholder={
+                  canComment
+                    ? "Suggest a revision or update for this SOP library…"
+                    : "Your role does not currently allow SOP comments."
+                }
+                className="min-h-[84px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none resize-none disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={!canComment}
+              />
+              <button
+                type="button"
+                onClick={addSuggestionComment}
+                disabled={!canComment}
+                className="inline-flex items-center gap-2 self-end rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <MessageSquare className="h-4 w-4" /> Submit
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {filtered.map((s) => (
               <div

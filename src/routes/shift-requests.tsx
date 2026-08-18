@@ -42,6 +42,8 @@ function ShiftRequestsPage() {
   const [reason, setReason] = useState("");
   const canSubmit = canSubmitShiftRequests(user);
   const canManage = canManageShiftRequests(user);
+  const canReviewShiftLead = !!user && ["shift-lead", "admin"].includes(user.role);
+  const canReviewManager = !!user && ["manager", "admin"].includes(user.role);
 
   const refresh = () => setRows(shiftRequestService.list());
 
@@ -152,6 +154,7 @@ function ShiftRequestsPage() {
                 <th className="px-4 py-2.5">Requested</th>
                 <th className="px-4 py-2.5">Reason</th>
                 <th className="px-4 py-2.5">Status</th>
+                <th className="px-4 py-2.5">Shift Lead</th>
                 <th className="px-4 py-2.5">Manager</th>
                 {canManage && <th className="px-4 py-2.5">Actions</th>}
               </tr>
@@ -173,25 +176,33 @@ function ShiftRequestsPage() {
                   <td className="px-4 py-3">
                     <StatusBadge status={request.status} />
                   </td>
+                  <td className="px-4 py-3 text-xs">{request.shiftLeadApproval}</td>
                   <td className="px-4 py-3 text-xs">{request.managerApproval}</td>
                   {canManage && (
                     <td className="px-4 py-3">
                       {request.status === "Pending" ? (
-                        <div className="flex gap-1">
-                          <button
-                            title="Approve and update roster where applicable"
-                            onClick={() => updateStatus(request, "Approved")}
-                            className="inline-flex items-center gap-1 rounded-md border border-success/30 bg-success/10 px-2 py-1 text-xs text-success hover:bg-success/15"
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Approve
-                          </button>
-                          <button
-                            title="Reject request without roster changes"
-                            onClick={() => updateStatus(request, "Rejected")}
-                            className="inline-flex items-center gap-1 rounded-md border border-critical/30 bg-critical/10 px-2 py-1 text-xs text-critical hover:bg-critical/15"
-                          >
-                            <XCircle className="h-3.5 w-3.5" /> Reject
-                          </button>
+                        <div className="flex flex-wrap gap-1">
+                          {(canReviewShiftLead || canReviewManager) && (
+                            <button
+                              title={canReviewShiftLead ? "Shift lead review" : "Manager review"}
+                              onClick={() => updateStatus(request, "Approved")}
+                              className="inline-flex items-center gap-1 rounded-md border border-success/30 bg-success/10 px-2 py-1 text-xs text-success hover:bg-success/15"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              {canReviewShiftLead && !canReviewManager
+                                ? "Shift Lead Approve"
+                                : "Approve"}
+                            </button>
+                          )}
+                          {(canReviewShiftLead || canReviewManager) && (
+                            <button
+                              title="Reject request without roster changes"
+                              onClick={() => updateStatus(request, "Rejected")}
+                              className="inline-flex items-center gap-1 rounded-md border border-critical/30 bg-critical/10 px-2 py-1 text-xs text-critical hover:bg-critical/15"
+                            >
+                              <XCircle className="h-3.5 w-3.5" /> Reject
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">No action</span>
